@@ -1,0 +1,672 @@
+{
+  "info": {
+    "name": "HRMS Backend API",
+    "_postman_id": "5f683ba2-974c-4c6b-a2f2-7f48ecd1f3b8",
+    "description": "Collection for testing the HRMS backend APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adminId\": \"ADMIN-001\",\n  \"name\": \"Admin User\",\n  \"email\": \"admin@company.com\",\n  \"password\": \"supersecretpassword\",\n  \"companyName\": \"Example Corp\",\n  \"companyStartDate\": \"2026-01-01\",\n  \"branchLocation\": \"Main Branch\",\n  \"phone\": \"1234567890\",\n  \"employeeQuotaTarget\": 50,\n  \"selectedPlanName\": \"Premium\",\n  \"planPrice\": \"499\",\n  \"panId\": \"ABCDE1234F\",\n  \"gstId\": \"22ABCDE1234F1Z5\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register-admin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "register-admin"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"supersecretpassword\",\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/admin-profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "admin-profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admin Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Admin\",\n  \"companyName\": \"Example Corp\",\n  \"branchLocation\": \"East Wing\",\n  \"phone\": \"9876543210\",\n  \"panId\": \"ABCDE1234F\",\n  \"gstId\": \"22ABCDE1234F1Z5\",\n  \"companySizeRange\": \"50-100\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/admin-profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "admin-profile"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        {
+          "name": "Get Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Engineering\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Engineering\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "Get Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"hr\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"contractor\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/employees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "employees"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Team Leaders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/employees/team-leaders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "employees",
+                "team-leaders"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/employees/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "employees",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"address\": \"456 Updated Ave\",\n  \"department\": \"Engineering\",\n  \"previousCompany\": \"Example Corp\",\n  \"previousRole\": \"Senior Engineer\",\n  \"yearsOfExperience\": \"6 Years\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/employees/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "employees",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "John Doe",
+                  "type": "text"
+                },
+                {
+                  "key": "gender",
+                  "value": "male",
+                  "type": "text"
+                },
+                {
+                  "key": "age",
+                  "value": "30",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "john.doe@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "employeePassword123",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "employee",
+                  "type": "text"
+                },
+                {
+                  "key": "department",
+                  "value": "Engineering",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "1234567890",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "123 Main St",
+                  "type": "text"
+                },
+                {
+                  "key": "previousCompany",
+                  "value": "Previous Co",
+                  "type": "text"
+                },
+                {
+                  "key": "previousRole",
+                  "value": "Engineer",
+                  "type": "text"
+                },
+                {
+                  "key": "yearsOfExperience",
+                  "value": "5",
+                  "type": "text"
+                },
+                {
+                  "key": "assignedLeader",
+                  "value": "Leader123",
+                  "type": "text"
+                },
+                {
+                  "key": "resume",
+                  "type": "file",
+                  "src": [
+                    ""
+                  ]
+                },
+                {
+                  "key": "panCard",
+                  "type": "file",
+                  "src": [
+                    ""
+                  ]
+                },
+                {
+                  "key": "aadhaarCard",
+                  "type": "file",
+                  "src": [
+                    ""
+                  ]
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/employees/create-employee",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "employees",
+                "create-employee"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Leaves",
+      "item": [
+        {
+          "name": "Toggle HR Power",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enablePower\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leaves/toggle-hr-power",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "leaves",
+                "toggle-hr-power"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leaves/pending-reviews",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "leaves",
+                "pending-reviews"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Action Leave Request",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leaves/action/:leaveId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "leaves",
+                "action",
+                ":leaveId"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Leave Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leaves/my-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "leaves",
+                "my-requests"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply Leave",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"casual\",\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-06-05\",\n  \"days\": 5,\n  \"reason\": \"Family event\",\n  \"employeeRole\": \"employee\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leaves/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "leaves",
+                "apply"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
