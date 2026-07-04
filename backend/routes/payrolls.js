@@ -385,11 +385,14 @@ router.patch('/:id/pay', verifyToken, checkPermission('manage_payroll'), async (
 // ==========================================
 // 🏦 LOANS MANAGEMENT
 // ==========================================
-router.get('/loans', verifyToken, checkPermission('manage_payroll'), async (req, res) => {
+router.get('/loans', verifyToken, async (req, res) => {
   try {
-    const loans = await Loan.find({
-      company: req.user.company
-    }).populate('employeeId', 'name empId department').sort({
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
+    const query = { company: req.user.company };
+    if (userRole === 'employee') {
+      query.employeeId = req.user.id;
+    }
+    const loans = await Loan.find(query).populate('employeeId', 'name empId department').sort({
       createdAt: -1
     });
     res.status(200).json(loans);
@@ -418,17 +421,22 @@ router.post('/loans', verifyToken, async (req, res) => {
         message: "Missing required fields."
       });
     }
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
+    const isManagerRole = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
+
     const newLoan = new Loan({
       company: req.user.company,
       employeeId,
-      amount,
+      amount: Number(amount),
       reason,
-      emiAmount,
-      balanceRemaining: amount,
-      status: 'Pending'
+      emiAmount: Number(emiAmount),
+      balanceRemaining: Number(amount),
+      status: isManagerRole ? 'Approved' : 'Pending',
+      ...(isManagerRole ? { disbursementDate: new Date(), approvedBy: req.user.id } : {})
     });
     await newLoan.save();
-    res.status(201).json(newLoan);
+    const populated = await newLoan.populate('employeeId', 'name empId department');
+    res.status(201).json(populated);
   } catch (error) {
     res.status(500).json({
       message: "Failed to request loan."

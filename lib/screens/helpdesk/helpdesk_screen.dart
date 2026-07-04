@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/hr_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../models/helpdesk.dart';
 
 class HelpdeskScreen extends StatefulWidget {
   const HelpdeskScreen({super.key});
@@ -13,11 +15,11 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _selectedCategory = 'IT';
+  String _selectedCategory = 'IT Support';
   String _selectedPriority = 'Medium';
 
-  final List<String> _categories = ['IT', 'HR', 'Facilities', 'Other'];
-  final List<String> _priorities = ['Low', 'Medium', 'High'];
+  final List<String> _categories = ['IT Support', 'Software Access', 'Hardware Request', 'Payroll & Compensation', 'HR & Benefits', 'Other'];
+  final List<String> _priorities = ['Low', 'Medium', 'High', 'Urgent'];
 
   @override
   void initState() {
@@ -93,7 +95,6 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Title
                       TextFormField(
                         controller: _titleCtrl,
                         style: const TextStyle(color: Color(0xFF0F172A)),
@@ -101,86 +102,37 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
                           labelText: 'Subject Title',
                           labelStyle: const TextStyle(color: Color(0xFF64748B)),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                          ),
                         ),
                         validator: (value) => value == null || value.trim().isEmpty ? 'Enter subject' : null,
                       ),
                       const SizedBox(height: 16),
 
-                      // Category Dropdown
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedCategory,
+                        decoration: InputDecoration(
+                          labelText: 'Category',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedCategory,
-                            dropdownColor: Colors.white,
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 16),
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                            isExpanded: true,
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                setModalState(() {
-                                  _selectedCategory = newValue;
-                                });
-                                setState(() {
-                                  _selectedCategory = newValue;
-                                });
-                              }
-                            },
-                            items: _categories.map<DropdownMenuItem<String>>((String value) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                        items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => _selectedCategory = val);
+                        },
                       ),
                       const SizedBox(height: 16),
 
-                      // Priority Dropdown
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedPriority,
+                        decoration: InputDecoration(
+                          labelText: 'Priority Level',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedPriority,
-                            dropdownColor: Colors.white,
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 16),
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                            isExpanded: true,
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                setModalState(() {
-                                  _selectedPriority = newValue;
-                                });
-                                setState(() {
-                                  _selectedPriority = newValue;
-                                });
-                              }
-                            },
-                            items: _priorities.map<DropdownMenuItem<String>>((String value) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                        items: _priorities.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => _selectedPriority = val);
+                        },
                       ),
                       const SizedBox(height: 16),
 
-                      // Description
                       TextFormField(
                         controller: _descCtrl,
                         maxLines: 3,
@@ -190,10 +142,6 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
                           labelStyle: const TextStyle(color: Color(0xFF64748B)),
                           alignLabelWithHint: true,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                          ),
                         ),
                         validator: (value) => value == null || value.trim().isEmpty ? 'Enter description' : null,
                       ),
@@ -221,12 +169,116 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
     );
   }
 
+  void _showResolveTicketModal(BuildContext context, HelpdeskTicket ticket) {
+    final hr = Provider.of<HrProvider>(context, listen: false);
+    final formKey = GlobalKey<FormState>();
+    final notesCtrl = TextEditingController(text: ticket.resolutionNotes ?? '');
+    String status = ticket.status.toLowerCase() == 'open' ? 'Resolved' : ticket.status;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Resolve Support Ticket',
+                        style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Subject: ${ticket.title}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                      const SizedBox(height: 16),
+
+                      DropdownButtonFormField<String>(
+                        initialValue: status,
+                        decoration: InputDecoration(
+                          labelText: 'Update Status',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'In Progress', child: Text('In Progress')),
+                          DropdownMenuItem(value: 'Resolved', child: Text('Resolved & Closed')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => status = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextFormField(
+                        controller: notesCtrl,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          labelText: 'Resolution Note / Action Taken',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Please enter resolution notes' : null,
+                      ),
+                      const SizedBox(height: 20),
+
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final success = await hr.updateTicketStatus(
+                            ticketId: ticket.id,
+                            status: status,
+                            resolutionNotes: notesCtrl.text.trim(),
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? 'Ticket resolved successfully!' : 'Failed to update ticket.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Save & Resolve Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hr = Provider.of<HrProvider>(context);
+    final auth = Provider.of<AuthProvider>(context);
+    final isAdminOrHr = auth.currentUser?.role == 'admin' || auth.currentUser?.role == 'hr';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Slate 50
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text('Helpdesk Tickets', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
@@ -234,68 +286,91 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
         scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
       ),
-      body: hr.myTickets.isEmpty
-          ? const Center(
-              child: Text(
-                'No IT support tickets raised.',
-                style: TextStyle(color: Color(0xFF64748B)),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: hr.myTickets.length,
-              itemBuilder: (context, index) {
-                final ticket = hr.myTickets[index];
-                
-                return Card(
-                  elevation: 2,
-                  color: Colors.white,
-                  shadowColor: const Color(0x100F172A),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: hr.isLoading && hr.myTickets.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : hr.myTickets.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No IT support tickets raised.',
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: hr.myTickets.length,
+                  itemBuilder: (context, index) {
+                    final ticket = hr.myTickets[index];
+                    final isResolved = ticket.status.toLowerCase() == 'resolved' || ticket.status.toLowerCase() == 'closed';
+                    
+                    return Card(
+                      elevation: 2,
+                      color: Colors.white,
+                      shadowColor: const Color(0x100F172A),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(
-                              ticket.title,
-                              style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 15),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    ticket.title,
+                                    style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 15),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _buildStatusBadge(ticket.status),
+                              ],
                             ),
-                            _buildStatusBadge(ticket.status),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Category: ${ticket.category} • Priority: ${ticket.priority}',
+                              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              ticket.description,
+                              style: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+                            ),
+                            if (ticket.resolutionNotes != null && ticket.resolutionNotes!.isNotEmpty) ...[
+                              const Divider(color: Color(0xFFE2E8F0), height: 24),
+                              Text(
+                                'Resolution note: ${ticket.resolutionNotes}',
+                                style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+
+                            if (isAdminOrHr && !isResolved) ...[
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: () => _showResolveTicketModal(context, ticket),
+                                icon: const Icon(Icons.check_circle_rounded, size: 16, color: Colors.white),
+                                label: const Text('Resolve Ticket & Add Note', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Category: ${ticket.category} • Priority: ${ticket.priority}',
-                          style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          ticket.description,
-                          style: const TextStyle(color: Color(0xFF475569), fontSize: 13),
-                        ),
-                        if (ticket.resolutionNotes != null && ticket.resolutionNotes!.isNotEmpty) ...[
-                          const Divider(color: Color(0xFFE2E8F0), height: 24),
-                          Text(
-                            'Resolution note: ${ticket.resolutionNotes}',
-                            style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
-                );
-              },
+                      ),
+                    );
+                  },
+                ),
+      floatingActionButton: isAdminOrHr
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _showRaiseModal(context),
+              backgroundColor: const Color(0xFFF43F5E),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Raise Ticket', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showRaiseModal(context),
-        backgroundColor: const Color(0xFFF43F5E),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
     );
   }
 
@@ -319,9 +394,9 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
         status,

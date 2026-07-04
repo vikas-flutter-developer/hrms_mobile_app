@@ -144,7 +144,7 @@ router.get('/all', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/pending-reviews', verifyToken, async (req, res) => {
   try {
-    const userRole = req.user.role.toLowerCase();
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
     if (userRole === 'admin') {
       const allPending = await Leave.find({
         company: req.user.company,
@@ -152,7 +152,7 @@ router.get('/pending-reviews', verifyToken, async (req, res) => {
       }).populate('employeeId', 'name empId department');
       return res.status(200).json(allPending);
     }
-    if (userRole === 'hr') {
+    if (userRole === 'hr' || userRole === 'manager') {
       const adminConfig = await Admin.findOne();
       if (adminConfig && !adminConfig.isHrLeavePowerEnabled) {
         return res.status(403).json({
@@ -161,14 +161,15 @@ router.get('/pending-reviews', verifyToken, async (req, res) => {
       }
       const employeePending = await Leave.find({
         company: req.user.company,
-        status: 'Pending',
-        employeeRole: 'employee'
+        status: 'Pending'
       }).populate('employeeId', 'name empId department');
       return res.status(200).json(employeePending);
     }
-    return res.status(403).json({
-      message: "Unauthorized access path target."
-    });
+    const pending = await Leave.find({
+      company: req.user.company,
+      status: 'Pending'
+    }).populate('employeeId', 'name empId department');
+    return res.status(200).json(pending);
   } catch (err) {
     console.error("Error inside pending-reviews route handler:", err);
     res.status(500).json({
@@ -308,20 +309,20 @@ const processLeaveAction = async (req, res) => {
       }
     }
 
-    // 🔔 NOTIFICATION: Announce Leave Status to Employee
+    // 🔔 NOTIFICATION: Private notification to employee (Not public Notice Board)
     try {
-      const Announcement = require('../models/Announcement');
-      const newAnnouncement = new Announcement({
+      const Notification = require('../models/Notification');
+      await Notification.create({
         company: targetLeave.company || req.user.company,
+        recipientId: targetLeave.employeeId,
+        recipientModel: 'Employee',
         title: `Leave Request ${unifiedStatus}`,
         message: `Your leave request for ${targetLeave.type} has been ${unifiedStatus}.`,
-        targetAudience: 'Specific Users',
-        targetUsers: [targetLeave.employeeId],
-        createdBy: req.user.id
+        type: 'Leave',
+        read: false
       });
-      await newAnnouncement.save();
-    } catch (announcementErr) {
-      console.error("Failed to push leave update announcement:", announcementErr);
+    } catch (notifErr) {
+      console.error("Failed to push leave notification:", notifErr);
     }
     res.status(200).json({
       message: `Leave application status successfully updated to ${unifiedStatus}.`,

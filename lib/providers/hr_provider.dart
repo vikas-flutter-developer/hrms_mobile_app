@@ -6,6 +6,10 @@ import '../models/payroll.dart';
 import '../models/asset.dart';
 import '../models/helpdesk.dart';
 import '../models/app_user.dart';
+import '../models/announcement.dart';
+import '../models/project.dart';
+import '../models/event_model.dart';
+import '../models/performance_review.dart';
 
 class HrProvider with ChangeNotifier {
   final _api = ApiService();
@@ -51,9 +55,11 @@ class HrProvider with ChangeNotifier {
   // --- Assets State ---
   List<Asset> _myAssets = [];
   List<AssetRequestModel> _myAssetRequests = [];
+  List<AssetDamageModel> _assetDamages = [];
   
   List<Asset> get myAssets => _myAssets;
   List<AssetRequestModel> get myAssetRequests => _myAssetRequests;
+  List<AssetDamageModel> get assetDamages => _assetDamages;
 
   // --- Helpdesk State ---
   List<HelpdeskTicket> _myTickets = [];
@@ -66,6 +72,31 @@ class HrProvider with ChangeNotifier {
   // --- Notifications State ---
   List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> get notifications => _notifications;
+
+  // --- Live Chat State ---
+  List<Map<String, dynamic>> _chatMessages = [];
+  List<Map<String, dynamic>> get chatMessages => _chatMessages;
+
+  // --- Extended Modules State ---
+  List<AnnouncementModel> _announcements = [];
+  List<ProjectModel> _projects = [];
+  List<TaskModel> _projectTasks = [];
+  List<CompanyEventModel> _events = [];
+  Map<String, dynamic> _reportOverview = {};
+  List<dynamic> _recruitmentCandidates = [];
+  List<PerformanceReviewModel> _performanceReviews = [];
+  List<dynamic> _trainingPrograms = [];
+  List<dynamic> _trainingAssignments = [];
+
+  List<AnnouncementModel> get announcements => _announcements;
+  List<ProjectModel> get projects => _projects;
+  List<TaskModel> get projectTasks => _projectTasks;
+  List<CompanyEventModel> get events => _events;
+  Map<String, dynamic> get reportOverview => _reportOverview;
+  List<dynamic> get recruitmentCandidates => _recruitmentCandidates;
+  List<PerformanceReviewModel> get performanceReviews => _performanceReviews;
+  List<dynamic> get trainingPrograms => _trainingPrograms;
+  List<dynamic> get trainingAssignments => _trainingAssignments;
 
   void _setLoading(bool value) {
     _isLoading = value;
@@ -433,8 +464,6 @@ class HrProvider with ChangeNotifier {
 
   Future<void> fetchMyLoans() async {
     try {
-      // In payroll.js, GET /loans gets all loans for administrators,
-      // but for standard employees it is filtered or can be requested.
       final response = await _api.get('/payroll/loans');
       if (response.statusCode == 200) {
         _myLoans = (response.data as List).map((x) => LoanRequest.fromJson(x)).toList();
@@ -445,19 +474,40 @@ class HrProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> applyLoan(double amount, String reason, double emiAmount) async {
+  Future<bool> applyLoan(double amount, String reason, double emiAmount, {String? employeeId}) async {
     try {
-      final response = await _api.post('/payroll/loans', data: {
+      final Map<String, dynamic> data = {
         'amount': amount,
         'reason': reason,
         'emiAmount': emiAmount,
-      });
-      if (response.statusCode == 201) {
+      };
+      if (employeeId != null && employeeId.isNotEmpty) {
+        data['employeeId'] = employeeId;
+      }
+      final response = await _api.post('/payroll/loans', data: data);
+      if (response.statusCode == 201 || response.statusCode == 200) {
         await fetchMyLoans();
         return true;
       }
       return false;
     } catch (e) {
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> resolveLoanStatus(String loanId, String status) async {
+    try {
+      _setLoading(true);
+      final response = await _api.patch('/payroll/loans/$loanId', data: {'status': status});
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyLoans();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
       _setError(e.toString());
       return false;
     }
@@ -566,14 +616,103 @@ class HrProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> resolveAssetRequestStatus(String requestId, String status, {String? adminNotes}) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/assets/requests/$requestId/status', data: {
+        'status': status, // 'Approved' or 'Rejected'
+        'adminNotes': adminNotes ?? 'Actioned by Admin',
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyAssetRequests();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> createCompanyAsset({
+    required String name,
+    required String category,
+    required String serialNumber,
+    required String condition,
+    required double purchaseValue,
+    String? empName,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/assets', data: {
+        'name': name,
+        'category': category,
+        'serialNumber': serialNumber,
+        'condition': condition,
+        'status': 'Assigned',
+        'purchaseValue': purchaseValue,
+        if (empName != null && empName.isNotEmpty) 'empName': empName,
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchMyAssets();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<void> fetchAssetDamages() async {
+    try {
+      final response = await _api.get('/assets/damages');
+      if (response.statusCode == 200) {
+        _assetDamages = (response.data as List).map((x) => AssetDamageModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Asset damages error: $e');
+    }
+  }
+
+  Future<bool> resolveAssetDamage({
+    required String damageId,
+    required double repairCost,
+    required String paymentMode,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/assets/damages/$damageId/status', data: {
+        'repairCost': repairCost,
+        'paymentMode': paymentMode,
+        'status': status,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchAssetDamages();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
   // ==========================================
   // 🛠️ HELPDESK TICKETS
   // ==========================================
 
   Future<void> fetchMyTickets() async {
     try {
-      // In helpdesk routes, GET / finds all company tickets, but filtering can be checked
-      final response = await _api.get('/helpdesk');
+      final response = await _api.get('/helpdesk/tickets');
       if (response.statusCode == 200) {
         _myTickets = (response.data as List).map((x) => HelpdeskTicket.fromJson(x)).toList();
         notifyListeners();
@@ -585,8 +724,8 @@ class HrProvider with ChangeNotifier {
 
   Future<bool> submitTicket(String title, String description, String category, String priority) async {
     try {
-      final response = await _api.post('/helpdesk', data: {
-        'title': title,
+      final response = await _api.post('/helpdesk/tickets', data: {
+        'subject': title,
         'description': description,
         'category': category,
         'priority': priority,
@@ -598,6 +737,56 @@ class HrProvider with ChangeNotifier {
       return false;
     } catch (e) {
       _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateTicketStatus({
+    required String ticketId,
+    required String status,
+    String? resolutionNotes,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.patch('/helpdesk/tickets/$ticketId', data: {
+        'status': status,
+        if (resolutionNotes != null && resolutionNotes.isNotEmpty) 'resolutionNotes': resolutionNotes,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTickets();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<void> fetchGlobalMessages() async {
+    try {
+      final response = await _api.get('/messages/global');
+      if (response.statusCode == 200) {
+        _chatMessages = List<Map<String, dynamic>>.from(response.data);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Fetch chat messages error: $e');
+    }
+  }
+
+  Future<bool> sendGlobalMessage(String content) async {
+    try {
+      final response = await _api.post('/messages/global', data: {'content': content});
+      if (response.statusCode == 201) {
+        await fetchGlobalMessages();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Send chat message error: $e');
       return false;
     }
   }
@@ -682,6 +871,709 @@ class HrProvider with ChangeNotifier {
       }
     } catch (e) {
       print('Mark notification read error: $e');
+    }
+  }
+
+  // ==========================================
+  // 📢 ANNOUNCEMENTS & NOTICE BOARD
+  // ==========================================
+  Future<void> fetchAnnouncements() async {
+    try {
+      final response = await _api.get('/announcements');
+      if (response.statusCode == 200) {
+        _announcements = (response.data as List).map((x) => AnnouncementModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Announcements error: $e');
+    }
+  }
+
+  Future<bool> createAnnouncement(String title, String message, String audience, {int? visibleForHours}) async {
+    try {
+      _setLoading(true);
+      final data = {
+        'title': title,
+        'message': message,
+        'targetAudience': audience,
+      };
+      if (visibleForHours != null) {
+        data['visibleForHours'] = visibleForHours.toString();
+      }
+      final response = await _api.post('/announcements', data: data);
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchAnnouncements();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateAnnouncement({
+    required String id,
+    required String title,
+    required String message,
+    required String audience,
+    int? visibleForHours,
+  }) async {
+    try {
+      _setLoading(true);
+      final data = {
+        'title': title,
+        'message': message,
+        'targetAudience': audience,
+      };
+      if (visibleForHours != null) {
+        data['visibleForHours'] = visibleForHours.toString();
+      } else {
+        data['visibleForHours'] = 'null';
+      }
+      final response = await _api.put('/announcements/$id', data: data);
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchAnnouncements();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> deleteAnnouncement(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/announcements/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchAnnouncements();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 📋 PROJECTS & TASK KANBAN
+  // ==========================================
+  Future<void> fetchProjects() async {
+    try {
+      final response = await _api.get('/projects');
+      if (response.statusCode == 200) {
+        _projects = (response.data as List).map((x) => ProjectModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Projects error: $e');
+    }
+  }
+
+  Future<bool> createProject({
+    required String name,
+    required String description,
+    required String department,
+    required String startDate,
+    required String endDate,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/projects', data: {
+        'name': name,
+        'description': description,
+        'department': department,
+        'startDate': startDate,
+        'endDate': endDate,
+        'status': 'In Progress',
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchProjects();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateProject({
+    required String id,
+    required String name,
+    required String description,
+    required String department,
+    required String startDate,
+    required String endDate,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/projects/$id', data: {
+        'title': name,
+        'description': description,
+        'department': department,
+        'startDate': startDate,
+        'deadline': endDate,
+        'status': status,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchProjects();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> deleteProject(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/projects/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchProjects();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<void> fetchMyTasks() async {
+    try {
+      final response = await _api.get('/tasks/my-tasks');
+      if (response.statusCode == 200) {
+        _projectTasks = (response.data as List).map((x) => TaskModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Tasks error: $e');
+    }
+  }
+
+  Future<bool> updateTaskStatus(String taskId, String status) async {
+    try {
+      final response = await _api.patch('/tasks/$taskId/status', data: {'status': status});
+      if (response.statusCode == 200) {
+        await fetchMyTasks();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Task status update error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> createTask({
+    required String projectId,
+    required String title,
+    required String description,
+    required String assignedToId,
+    required String priority,
+    required String deadline,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/tasks', data: {
+        'project': projectId,
+        'title': title,
+        'description': description,
+        'assignedTo': assignedToId,
+        'priority': priority,
+        'deadline': deadline,
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchMyTasks();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateTask({
+    required String id,
+    required String projectId,
+    required String title,
+    required String description,
+    required String assignedToId,
+    required String priority,
+    required String deadline,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/tasks/$id', data: {
+        'project': projectId,
+        'title': title,
+        'description': description,
+        'assignedTo': assignedToId,
+        'priority': priority,
+        'deadline': deadline,
+        'status': status,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTasks();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> deleteTask(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/tasks/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTasks();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 🎂 COMPANY EVENTS & CELEBRATIONS
+  // ==========================================
+  Future<void> fetchEvents() async {
+    try {
+      final response = await _api.get('/events');
+      if (response.statusCode == 200) {
+        _events = (response.data as List).map((x) => CompanyEventModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Events error: $e');
+    }
+  }
+
+  Future<bool> createEvent({
+    required String title,
+    required String description,
+    required String date,
+    required String location,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/events', data: {
+        'title': title,
+        'description': description,
+        'date': date,
+        'location': location,
+        'status': 'Upcoming',
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchEvents();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateEvent({
+    required String id,
+    required String title,
+    required String description,
+    required String date,
+    required String location,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/events/$id', data: {
+        'title': title,
+        'description': description,
+        'date': date,
+        'location': location,
+        'status': status,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchEvents();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> deleteEvent(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/events/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchEvents();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      _setError(e.toString());
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 📊 REPORTS & ANALYTICS OVERVIEW
+  // ==========================================
+  Future<void> fetchReportOverview() async {
+    try {
+      _setLoading(true);
+      final responses = await Future.wait([
+        _api.get('/reports/dashboard-overview'),
+        _api.get('/reports/dashboard-stats'),
+        _api.get('/reports/headcount-by-department'),
+      ]);
+
+      final Map<String, dynamic> mergedReport = {};
+      
+      if (responses[0].statusCode == 200 && responses[0].data != null) {
+        mergedReport.addAll(Map<String, dynamic>.from(responses[0].data));
+      }
+      if (responses[1].statusCode == 200 && responses[1].data != null) {
+        mergedReport['stats'] = Map<String, dynamic>.from(responses[1].data);
+      }
+      if (responses[2].statusCode == 200 && responses[2].data != null) {
+        mergedReport['headcountByDept'] = List<dynamic>.from(responses[2].data);
+      }
+      
+      _reportOverview = mergedReport;
+      _setLoading(false);
+      notifyListeners();
+    } catch (e) {
+      _setLoading(false);
+      print('Report overview error: $e');
+    }
+  }
+
+  Future<void> fetchRecruitmentCandidates() async {
+    try {
+      final response = await _api.get('/reports/recruitment');
+      if (response.statusCode == 200) {
+        _recruitmentCandidates = List<dynamic>.from(response.data['candidates'] ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Recruitment fetch error: $e');
+    }
+  }
+
+  Future<void> fetchPerformanceReviews() async {
+    try {
+      _setLoading(true);
+      final response = await _api.get('/performance/reviews');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        _performanceReviews = (response.data as List).map((x) => PerformanceReviewModel.fromJson(x)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      _setLoading(false);
+      print('Performance reviews fetch error: $e');
+    }
+  }
+
+  Future<bool> createPerformanceReview({
+    required String employeeId,
+    required String cycleId,
+    required double rating,
+    required String overallComments,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/performance/reviews', data: {
+        'employee': employeeId,
+        'cycle': cycleId,
+        'rating': rating.toInt(),
+        'status': status,
+        'overallComments': overallComments,
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchPerformanceReviews();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Create performance review error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updatePerformanceReview({
+    required String id,
+    required double rating,
+    required String overallComments,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/performance/reviews/$id', data: {
+        'rating': rating.toInt(),
+        'status': status,
+        'overallComments': overallComments,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchPerformanceReviews();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Update performance review error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deletePerformanceReview(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/performance/reviews/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchPerformanceReviews();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Delete performance review error: $e');
+      return false;
+    }
+  }
+
+  Future<void> fetchTrainingPrograms() async {
+    try {
+      final response = await _api.get('/training/programs');
+      if (response.statusCode == 200) {
+        _trainingPrograms = List<dynamic>.from(response.data ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Fetch training programs error: $e');
+    }
+  }
+
+  Future<void> fetchTrainingAssignments() async {
+    try {
+      final response = await _api.get('/training/assignments');
+      if (response.statusCode == 200) {
+        _trainingAssignments = List<dynamic>.from(response.data ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Fetch training assignments error: $e');
+    }
+  }
+
+  Future<bool> createTrainingProgram({
+    required String title,
+    required String description,
+    required String category,
+    required String mode,
+    required String trainer,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/training/programs', data: {
+        'title': title,
+        'description': description,
+        'category': category,
+        'mode': mode,
+        'trainer': trainer,
+        'startDate': DateTime.now().toIso8601String(),
+        'endDate': DateTime.now().add(const Duration(days: 30)).toIso8601String(),
+        'status': 'Ongoing'
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchTrainingPrograms();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Create training program error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> assignEmployeeToTraining({
+    required String employeeId,
+    required String programId,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/training/assignments', data: {
+        'employee': employeeId,
+        'trainingProgram': programId,
+        'status': 'In Progress'
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchTrainingAssignments();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Assign employee to training error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteTrainingAssignment(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/training/assignments/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchTrainingAssignments();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Delete training assignment error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateTrainingProgram({
+    required String id,
+    required String title,
+    required String description,
+    required String category,
+    required String mode,
+    required String trainer,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/training/programs/$id', data: {
+        'title': title,
+        'description': description,
+        'category': category,
+        'mode': mode,
+        'trainer': trainer,
+        'status': status
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchTrainingPrograms();
+        await fetchTrainingAssignments(); // refresh assignments as they embed program data
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Update training program error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateTrainingAssignmentStatus({
+    required String id,
+    required String status,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/training/assignments/$id', data: {
+        'status': status
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchTrainingAssignments();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Update training assignment status error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteTrainingProgram(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/training/programs/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchTrainingPrograms();
+        await fetchTrainingAssignments();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Delete training program error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> issueCertificate({
+    required String programId,
+    required String employeeId,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/training/$programId/certificate/$employeeId');
+      _setLoading(false);
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Issue certificate error: $e');
+      return false;
     }
   }
 }

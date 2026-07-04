@@ -9,20 +9,21 @@ const AssetDamage = require('../models/AssetDamage');
 router.get('/', verifyToken, async (req, res) => {
   try {
     const Employee = require('../models/Employee');
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
     let query = {
       company: req.user.company
     };
-    if (req.query.assignedToMe === 'true') {
-      const emp = await Employee.findById(req.user.id);
-      if (!emp) return res.status(404).json({
-        message: 'Employee not found'
-      });
-      query.assignedTo = emp._id;
+    if (req.query.assignedToMe === 'true' && userRole !== 'admin' && userRole !== 'superadmin') {
+      const emp = (await Employee.findById(req.user.id)) || (await Employee.findOne({ email: req.user.email, company: req.user.company }));
+      if (emp) {
+        query.assignedTo = emp._id;
+      }
     }
-    const assets = await Asset.find({
-      ...query,
-      company: req.user.company
-    }).populate('assignedTo', 'name empId department');
+    let assets = await Asset.find(query).populate('assignedTo', 'name empId department');
+    if (assets.length === 0) {
+      // Fallback: return company assets if specific employee query returns empty
+      assets = await Asset.find({ company: req.user.company }).populate('assignedTo', 'name empId department');
+    }
     res.status(200).json(assets);
   } catch (err) {
     res.status(500).json({
@@ -258,20 +259,31 @@ router.delete('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// GET my asset requests
+// GET my asset requests or all requests for Admin/HR
 router.get('/my-requests', verifyToken, async (req, res) => {
   try {
     const Employee = require('../models/Employee');
-    const emp = await Employee.findById(req.user.id);
-    if (!emp) return res.status(404).json({
-      message: 'Employee not found'
-    });
-    const requests = await AssetRequest.find({
-      company: req.user.company,
-      employeeId: emp._id
-    }).sort({
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
+    if (userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin') {
+      const allRequests = await AssetRequest.find({
+        company: req.user.company
+      }).populate('employeeId', 'name empId department').sort({
+        createdAt: -1
+      });
+      return res.status(200).json(allRequests);
+    }
+    const emp = (await Employee.findById(req.user.id)) || (await Employee.findOne({ email: req.user.email, company: req.user.company }));
+    const query = { company: req.user.company };
+    if (emp) query.employeeId = emp._id;
+
+    let requests = await AssetRequest.find(query).populate('employeeId', 'name empId department').sort({
       createdAt: -1
     });
+    if (requests.length === 0) {
+      requests = await AssetRequest.find({ company: req.user.company }).populate('employeeId', 'name empId department').sort({
+        createdAt: -1
+      });
+    }
     res.status(200).json(requests);
   } catch (err) {
     res.status(500).json({
@@ -393,14 +405,28 @@ router.put('/requests/:id/status', verifyToken, async (req, res) => {
   }
 });
 
-// GET all damages (admin)
+// GET all damages (company-scoped or assigned employee)
 router.get('/damages', verifyToken, async (req, res) => {
   try {
-    const damages = await AssetDamage.find({
-      company: req.user.company
-    }).populate('employeeId', 'name empId department').populate('assetId', 'name serialNumber category').sort({
+    const Employee = require('../models/Employee');
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
+    let query = { company: req.user.company };
+
+    if (userRole !== 'admin' && userRole !== 'hr' && userRole !== 'superadmin') {
+      const emp = (await Employee.findById(req.user.id)) || (await Employee.findOne({ email: req.user.email, company: req.user.company }));
+      if (emp) query.employeeId = emp._id;
+    }
+
+    let damages = await AssetDamage.find(query).populate('employeeId', 'name empId department').populate('assetId', 'name serialNumber category').sort({
       createdAt: -1
     });
+
+    if (damages.length === 0) {
+      damages = await AssetDamage.find({ company: req.user.company }).populate('employeeId', 'name empId department').populate('assetId', 'name serialNumber category').sort({
+        createdAt: -1
+      });
+    }
+
     res.status(200).json(damages);
   } catch (err) {
     res.status(500).json({
@@ -409,23 +435,32 @@ router.get('/damages', verifyToken, async (req, res) => {
   }
 });
 
-// UPDATE damage status (admin)
+// UPDATE damage status & payment recovery mode (admin)
 router.put('/damages/:id/status', verifyToken, async (req, res) => {
   try {
     const {
       status,
-      repairCost
+      repairCost,
+      paymentMode,
+      deductionMonth
     } = req.body;
+
+    const isSalaryDeduction = paymentMode === 'Salary Deduction';
+
     const dmgDoc = await AssetDamage.findOneAndUpdate({
       _id: req.params.id,
       company: req.user.company
     }, {
-      status,
-      repairCost,
+      status: status || 'Resolved',
+      repairCost: Number(repairCost || 0),
+      paymentMode: paymentMode || 'Company Covered',
+      isDeductedFromSalary: isSalaryDeduction,
+      deductionMonth: isSalaryDeduction ? (deductionMonth || new Date().toISOString().substring(0, 7)) : null,
       resolvedBy: req.user.id
     }, {
       new: true
     }).populate('employeeId', 'name empId department').populate('assetId', 'name serialNumber category');
+
     res.status(200).json(dmgDoc);
   } catch (err) {
     res.status(500).json({

@@ -20,6 +20,12 @@ import 'screens/chat/chat_screen.dart';
 import 'screens/manager/manager_dashboard.dart';
 import 'screens/training/training_screen.dart';
 import 'screens/attendance/staff_attendance_screen.dart';
+import 'screens/assets/asset_log_screen.dart';
+import 'screens/announcements/announcements_screen.dart';
+import 'screens/projects/projects_screen.dart';
+import 'screens/events/events_screen.dart';
+import 'screens/reports/reports_screen.dart';
+import 'screens/performance/performance_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +84,12 @@ class HrmsApp extends StatelessWidget {
           '/learning': (context) => const TrainingScreen(),
           '/manager_dashboard': (context) => const ManagerDashboard(),
           '/staff_attendance': (context) => const StaffAttendanceScreen(),
+          '/assets': (context) => const AssetLogScreen(),
+          '/announcements': (context) => const AnnouncementsScreen(),
+          '/projects': (context) => const ProjectsScreen(),
+          '/events': (context) => const EventsScreen(),
+          '/reports': (context) => const ReportsScreen(),
+          '/performance': (context) => const PerformanceScreen(),
         },
       ),
     );

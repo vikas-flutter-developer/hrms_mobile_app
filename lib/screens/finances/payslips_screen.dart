@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/hr_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/payroll.dart';
@@ -31,86 +32,425 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
     });
   }
 
-  Future<void> _exportPayslipPDF(Payslip payslip) async {
-    // Generate a beautiful payslip PDF on the fly using Syncfusion PDF
+  // ==========================================
+  // 📄 CORPORATE PDF PAYSLIP GENERATOR
+  // ==========================================
+  Future<File> _generatePayslipPDFFile(Payslip payslip) async {
     final document = PdfDocument();
     final page = document.pages.add();
     final g = page.graphics;
 
-    final titleFont = PdfStandardFont(PdfFontFamily.helvetica, 18, style: PdfFontStyle.bold);
+    final headerFont = PdfStandardFont(PdfFontFamily.helvetica, 18, style: PdfFontStyle.bold);
+    final subHeaderFont = PdfStandardFont(PdfFontFamily.helvetica, 11, style: PdfFontStyle.bold);
     final sectionFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
+    final tableHeaderFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
     final standardFont = PdfStandardFont(PdfFontFamily.helvetica, 10);
+    final boldFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
 
-    // Write title
-    g.drawString('CORPORATE PAYSLIP', titleFont, bounds: const Rect.fromLTWH(0, 0, 500, 30));
-    g.drawString('Month: ${payslip.month}', standardFont, bounds: const Rect.fromLTWH(0, 30, 200, 20));
-    g.drawString('Status: ${payslip.status}', standardFont, bounds: const Rect.fromLTWH(0, 45, 200, 20));
-    
-    // Draw divider line
-    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), const Offset(0, 65), const Offset(500, 65));
+    // 1. Top Banner Box
+    g.drawRectangle(
+      brush: PdfSolidBrush(PdfColor(15, 23, 42)), // Slate 900
+      bounds: const Rect.fromLTWH(0, 0, 500, 55),
+    );
+    g.drawString(
+      'ENTERPRISE HRMS',
+      headerFont,
+      brush: PdfBrushes.white,
+      bounds: const Rect.fromLTWH(15, 12, 350, 25),
+    );
+    g.drawString(
+      'CONFIDENTIAL SALARY PAYSLIP STATEMENT',
+      subHeaderFont,
+      brush: PdfSolidBrush(PdfColor(148, 163, 184)),
+      bounds: const Rect.fromLTWH(15, 33, 350, 18),
+    );
 
-    // Earnings Section
-    g.drawString('EARNINGS', sectionFont, bounds: const Rect.fromLTWH(0, 80, 200, 20));
-    
-    double y = 105;
-    final earnings = {
-      'Basic Pay': payslip.basicPay,
-      'House Rent Allowance (HRA)': payslip.hra,
-      'Special Allowance': payslip.specialAllowance,
-      'Overtime Pay': payslip.overtimePay,
-      'Incentives': payslip.incentives,
-      'Bonus': payslip.bonus,
-      'Gratuity': payslip.gratuity,
-    };
+    // 2. Employee Details Card Header
+    double y = 70;
+    g.drawRectangle(
+      pen: PdfPen(PdfColor(226, 232, 240), width: 1),
+      brush: PdfSolidBrush(PdfColor(248, 250, 252)),
+      bounds: Rect.fromLTWH(0, y, 500, 65),
+    );
 
-    earnings.forEach((key, val) {
-      if (val > 0) {
-        g.drawString(key, standardFont, bounds: Rect.fromLTWH(20, y, 250, 20));
-        g.drawString('INR ${val.toStringAsFixed(2)}', standardFont, bounds: Rect.fromLTWH(300, y, 150, 20));
-        y += 20;
+    g.drawString('EMPLOYEE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(12, y + 8, 200, 16));
+    g.drawString('Employee Name: ${payslip.employeeName ?? "Staff Member"}', boldFont, bounds: Rect.fromLTWH(12, y + 26, 230, 16));
+    g.drawString('Employee ID: ${payslip.employeeEmpId ?? "EMP-DEFAULT"}', standardFont, bounds: Rect.fromLTWH(12, y + 42, 230, 16));
+
+    g.drawString('PAY STATEMENT INFO', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(260, y + 8, 200, 16));
+    g.drawString('Pay Period: ${payslip.month}', boldFont, bounds: Rect.fromLTWH(260, y + 26, 230, 16));
+    g.drawString('Department: ${payslip.employeeDepartment ?? "General"}', standardFont, bounds: Rect.fromLTWH(260, y + 42, 230, 16));
+
+    y += 80;
+
+    // 3. EARNINGS & DEDUCTIONS Side-by-side Tables Header
+    // Left Table: EARNINGS (Width: 240)
+    g.drawRectangle(brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(0, y, 240, 22));
+    g.drawString('EARNINGS', tableHeaderFont, brush: PdfBrushes.white, bounds: Rect.fromLTWH(10, y + 4, 150, 16));
+    g.drawString('AMOUNT (INR)', tableHeaderFont, brush: PdfBrushes.white, bounds: Rect.fromLTWH(150, y + 4, 85, 16));
+
+    // Right Table: DEDUCTIONS (Width: 240, X: 260)
+    g.drawRectangle(brush: PdfSolidBrush(PdfColor(239, 68, 68)), bounds: Rect.fromLTWH(260, y, 240, 22));
+    g.drawString('DEDUCTIONS', tableHeaderFont, brush: PdfBrushes.white, bounds: Rect.fromLTWH(270, y + 4, 150, 16));
+    g.drawString('AMOUNT (INR)', tableHeaderFont, brush: PdfBrushes.white, bounds: Rect.fromLTWH(410, y + 4, 85, 16));
+
+    y += 26;
+
+    final earnings = [
+      {'name': 'Basic Salary', 'val': payslip.basicPay},
+      {'name': 'House Rent Allowance (HRA)', 'val': payslip.hra},
+      {'name': 'Special Allowance', 'val': payslip.specialAllowance},
+      if (payslip.overtimePay > 0) {'name': 'Overtime Pay', 'val': payslip.overtimePay},
+      if (payslip.incentives > 0) {'name': 'Incentives', 'val': payslip.incentives},
+      if (payslip.bonus > 0) {'name': 'Performance Bonus', 'val': payslip.bonus},
+      if (payslip.gratuity > 0) {'name': 'Gratuity Pay', 'val': payslip.gratuity},
+    ];
+
+    final deductions = [
+      if (payslip.pfDeduction > 0) {'name': 'Provident Fund (PF)', 'val': payslip.pfDeduction},
+      if (payslip.esiDeduction > 0) {'name': 'ESI Insurance', 'val': payslip.esiDeduction},
+      if (payslip.professionalTax > 0) {'name': 'Professional Tax (PT)', 'val': payslip.professionalTax},
+      if (payslip.tds > 0) {'name': 'TDS Income Tax', 'val': payslip.tds},
+      if (payslip.lopDeduction > 0) {'name': 'Loss of Pay (LOP)', 'val': payslip.lopDeduction},
+      if (payslip.loanEmi > 0) {'name': 'Salary Loan EMI', 'val': payslip.loanEmi},
+    ];
+
+    double totalEarnings = earnings.fold(0, (sum, item) => sum + (item['val'] as double));
+    double totalDeductions = deductions.fold(0, (sum, item) => sum + (item['val'] as double));
+
+    int rowCount = earnings.length > deductions.length ? earnings.length : deductions.length;
+    if (rowCount < 5) rowCount = 5;
+
+    for (int i = 0; i < rowCount; i++) {
+      PdfColor rowBg = i % 2 == 0 ? PdfColor(248, 250, 252) : PdfColor(255, 255, 255);
+      
+      // Left row (Earnings)
+      g.drawRectangle(brush: PdfSolidBrush(rowBg), bounds: Rect.fromLTWH(0, y, 240, 20));
+      if (i < earnings.length) {
+        g.drawString(earnings[i]['name'] as String, standardFont, bounds: Rect.fromLTWH(8, y + 4, 150, 16));
+        g.drawString((earnings[i]['val'] as double).toStringAsFixed(2), standardFont, bounds: Rect.fromLTWH(160, y + 4, 75, 16));
       }
-    });
 
-    // Deductions Section
-    g.drawLine(PdfPen(PdfColor(226, 232, 240), width: 0.5), Offset(0, y + 10), Offset(500, y + 10));
-    y += 25;
-    g.drawString('DEDUCTIONS', sectionFont, bounds: Rect.fromLTWH(0, y, 200, 20));
-    y += 25;
-
-    final deductions = {
-      'Provident Fund (PF)': payslip.pfDeduction,
-      'ESI Health Ins.': payslip.esiDeduction,
-      'Professional Tax (PT)': payslip.professionalTax,
-      'TDS Tax Deducted': payslip.tds,
-      'Loss of Pay (LOP) Days': payslip.lopDeduction,
-      'EMI Advance Loan': payslip.loanEmi,
-    };
-
-    deductions.forEach((key, val) {
-      if (val > 0) {
-        g.drawString(key, standardFont, bounds: Rect.fromLTWH(20, y, 250, 20));
-        g.drawString('INR ${val.toStringAsFixed(2)}', standardFont, bounds: Rect.fromLTWH(300, y, 150, 20));
-        y += 20;
+      // Right row (Deductions)
+      g.drawRectangle(brush: PdfSolidBrush(rowBg), bounds: Rect.fromLTWH(260, y, 240, 20));
+      if (i < deductions.length) {
+        g.drawString(deductions[i]['name'] as String, standardFont, bounds: Rect.fromLTWH(268, y + 4, 150, 16));
+        g.drawString((deductions[i]['val'] as double).toStringAsFixed(2), standardFont, bounds: Rect.fromLTWH(420, y + 4, 75, 16));
       }
-    });
+      y += 20;
+    }
 
-    // Summary Section
-    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1.5), Offset(0, y + 10), Offset(500, y + 10));
-    y += 25;
+    // Totals Row
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(0, y), Offset(240, y));
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(260, y), Offset(500, y));
+    y += 5;
 
-    g.drawString('NET TAKE HOME PAY', sectionFont, bounds: Rect.fromLTWH(0, y, 200, 20));
-    g.drawString('INR ${payslip.netPay.toStringAsFixed(2)}', sectionFont, bounds: Rect.fromLTWH(300, y, 150, 20));
+    g.drawString('Total Gross Earnings', boldFont, bounds: Rect.fromLTWH(8, y, 150, 16));
+    g.drawString('INR ${totalEarnings.toStringAsFixed(2)}', boldFont, bounds: Rect.fromLTWH(150, y, 85, 16));
 
-    // Save and Share
+    g.drawString('Total Deductions', boldFont, bounds: Rect.fromLTWH(268, y, 150, 16));
+    g.drawString('INR ${totalDeductions.toStringAsFixed(2)}', boldFont, bounds: Rect.fromLTWH(410, y, 85, 16));
+
+    y += 30;
+
+    // 4. NET TAKE HOME PAY Highlight Banner
+    g.drawRectangle(
+      brush: PdfSolidBrush(PdfColor(16, 185, 129)), // Emerald Green
+      bounds: Rect.fromLTWH(0, y, 500, 45),
+    );
+    g.drawString(
+      'NET TAKE HOME SALARY',
+      sectionFont,
+      brush: PdfBrushes.white,
+      bounds: Rect.fromLTWH(15, y + 14, 250, 20),
+    );
+    g.drawString(
+      'INR ${payslip.netPay.toStringAsFixed(2)}',
+      headerFont,
+      brush: PdfBrushes.white,
+      bounds: Rect.fromLTWH(280, y + 10, 200, 25),
+    );
+
+    y += 65;
+
+    // 5. Digital Seal / Footer Note
+    g.drawString('Payment Status: ${payslip.status.toUpperCase()}', boldFont, bounds: Rect.fromLTWH(0, y, 300, 16));
+    g.drawString('Disbursement Date: ${payslip.paymentDate ?? "Current Cycle"}', standardFont, bounds: Rect.fromLTWH(0, y + 16, 300, 16));
+
+    g.drawString(
+      'This is an authentic computer-generated document issued by Enterprise HRMS System.',
+      PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.italic),
+      brush: PdfSolidBrush(PdfColor(100, 116, 139)),
+      bounds: Rect.fromLTWH(0, y + 40, 500, 16),
+    );
+
     final bytes = await document.save();
     document.dispose();
 
     final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/payslip_${payslip.month.replaceAll(' ', '_')}.pdf');
+    final sanitizedMonth = payslip.month.replaceAll(' ', '_');
+    final empNameSanitized = (payslip.employeeName ?? 'Employee').replaceAll(' ', '_');
+    final file = File('${tempDir.path}/Payslip_${empNameSanitized}_$sanitizedMonth.pdf');
     await file.writeAsBytes(bytes);
+    return file;
+  }
 
+  Future<void> _exportPayslipPDF(Payslip payslip) async {
+    final file = await _generatePayslipPDFFile(payslip);
     final xFile = XFile(file.path);
-    await Share.shareXFiles([xFile], text: 'My Payslip for ${payslip.month}');
+    await Share.shareXFiles([xFile], text: 'Official Payslip PDF for ${payslip.month}');
+  }
+
+  // ==========================================
+  // 💬 WHATSAPP SHARE IMPLEMENTATION
+  // ==========================================
+  Future<void> _sharePayslipViaWhatsApp(BuildContext context, Payslip payslip, {String? empPhone}) async {
+    try {
+      final file = await _generatePayslipPDFFile(payslip);
+      final xFile = XFile(file.path);
+      
+      final empName = payslip.employeeName ?? 'Employee';
+      final messageText = 
+          "📄 *OFFICIAL SALARY PAYSLIP*\n\n"
+          "Hello *$empName*,\n"
+          "Here is your official PDF Payslip for *${payslip.month}*.\n\n"
+          "🔹 *Net Salary:* ₹ ${payslip.netPay.toStringAsFixed(0)}\n"
+          "🔹 *Status:* ${payslip.status}\n\n"
+          "Please find the attached PDF document.";
+
+      if (empPhone != null && empPhone.trim().isNotEmpty) {
+        final cleanPhone = empPhone.replaceAll(RegExp(r'[^\d+]'), '');
+        final whatsappUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(messageText)}");
+        if (await canLaunchUrl(whatsappUrl)) {
+          await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+        }
+      }
+
+      // Share PDF document to WhatsApp / target apps
+      await Share.shareXFiles([xFile], text: messageText);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share payslip PDF: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  // ==========================================
+  // 🖼️ PAYSLIP FORMAT PREVIEW MODAL
+  // ==========================================
+  void _showFormatPreviewModal(BuildContext context, Payslip payslip) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'PDF Payslip Format Preview',
+                    style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 10),
+
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                      boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 10)],
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // PDF Header Banner
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text('ENTERPRISE HRMS', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                              SizedBox(height: 4),
+                              Text('CONFIDENTIAL SALARY PAYSLIP STATEMENT', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Employee Details Box
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('EMPLOYEE DETAILS', style: TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 6),
+                                    Text('Name: ${payslip.employeeName ?? "Staff Member"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    Text('ID: ${payslip.employeeEmpId ?? "EMP-DEFAULT"}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('PAY STATEMENT INFO', style: TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 6),
+                                    Text('Month: ${payslip.month}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    Text('Dept: ${payslip.employeeDepartment ?? "General"}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Earnings vs Deductions Preview Table
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Earnings Column
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    color: const Color(0xFF2563EB),
+                                    width: double.infinity,
+                                    child: const Text('EARNINGS (INR)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                                  ),
+                                  _previewRow('Basic Salary', payslip.basicPay),
+                                  _previewRow('HRA', payslip.hra),
+                                  _previewRow('Special Allowance', payslip.specialAllowance),
+                                  if (payslip.overtimePay > 0) _previewRow('Overtime Pay', payslip.overtimePay),
+                                  if (payslip.bonus > 0) _previewRow('Bonus', payslip.bonus),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Deductions Column
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    color: const Color(0xFFEF4444),
+                                    width: double.infinity,
+                                    child: const Text('DEDUCTIONS (INR)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                                  ),
+                                  if (payslip.pfDeduction > 0) _previewRow('PF Deduction', payslip.pfDeduction),
+                                  if (payslip.esiDeduction > 0) _previewRow('ESI Insurance', payslip.esiDeduction),
+                                  if (payslip.professionalTax > 0) _previewRow('PT Tax', payslip.professionalTax),
+                                  if (payslip.tds > 0) _previewRow('TDS Tax', payslip.tds),
+                                  if (payslip.lopDeduction > 0) _previewRow('LOP Days', payslip.lopDeduction),
+                                  if (payslip.loanEmi > 0) _previewRow('Loan EMI', payslip.loanEmi),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Net Take Home Banner
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('NET TAKE HOME SALARY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text('₹ ${payslip.netPay.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Footer Note
+                        Center(
+                          child: Text(
+                            'This is a computer-generated PDF document. Confidential.',
+                            style: TextStyle(color: Colors.grey[500], fontSize: 10, fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _sharePayslipViaWhatsApp(context, payslip);
+                },
+                icon: const Icon(Icons.send_rounded, color: Colors.white),
+                label: const Text('Send via WhatsApp (PDF)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366), // WhatsApp Green
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _previewRow(String title, double amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 10, color: Color(0xFF475569)), overflow: TextOverflow.ellipsis)),
+          Text('₹${amount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
+        ],
+      ),
+    );
   }
 
   void _showDetails(Payslip payslip) {
@@ -133,12 +473,25 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
                     'Payslip: ${payslip.month}',
                     style: const TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.share_rounded, color: Color(0xFF2563EB)),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _exportPayslipPDF(payslip);
-                    },
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFEF4444)),
+                        tooltip: 'Preview PDF Format',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showFormatPreviewModal(context, payslip);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.share_rounded, color: Color(0xFF2563EB)),
+                        tooltip: 'Export & Share PDF',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _exportPayslipPDF(payslip);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -164,7 +517,7 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
               if (payslip.lopDeduction > 0) _buildRow('Loss of Pay (LOP)', payslip.lopDeduction),
               if (payslip.loanEmi > 0) _buildRow('EMI Loan repayment', payslip.loanEmi),
 
-              const Divider(color: Color(0xFFE2E8F0), height: 32),
+              const Divider(color: Color(0xFFE2E8F0), height: 24),
               
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -180,6 +533,38 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
                 ],
               ),
               const SizedBox(height: 20),
+
+              // WhatsApp Share Action Button
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _sharePayslipViaWhatsApp(context, payslip);
+                },
+                icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                label: const Text('Send Payslip via WhatsApp (PDF)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366), // WhatsApp Brand Green
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Format Preview Button
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showFormatPreviewModal(context, payslip);
+                },
+                icon: const Icon(Icons.visibility_rounded, color: Color(0xFF2563EB), size: 18),
+                label: const Text('Preview Payslip Format', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: Color(0xFF2563EB)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
             ],
           ),
         );

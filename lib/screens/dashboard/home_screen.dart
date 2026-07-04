@@ -306,14 +306,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final actions = [
       if (isAdminOrHr)
         _ActionItem(Icons.how_to_reg_rounded, 'Staff Attendance', '/staff_attendance', Colors.indigo[600]!),
+      _ActionItem(Icons.campaign_rounded, 'Notice Board', '/announcements', Colors.amber[800]!),
+      _ActionItem(Icons.account_tree_rounded, 'Projects', '/projects', Colors.blue[700]!),
+      _ActionItem(Icons.celebration_rounded, 'Events', '/events', Colors.pink[600]!),
+      _ActionItem(Icons.bar_chart_rounded, 'HR Reports', '/reports', Colors.deepPurple),
       _ActionItem(Icons.calendar_today_rounded, 'Leave Portal', '/leaves', Colors.purple),
       _ActionItem(Icons.receipt_long_rounded, 'Payslip Hub', '/payslips', Colors.amber[800]!),
       _ActionItem(Icons.monetization_on_rounded, 'Loan Tracker', '/loans', Colors.green[700]!),
       _ActionItem(Icons.camera_alt_rounded, 'Claim Expense', '/expenses', Colors.red[700]!),
       _ActionItem(Icons.devices_rounded, 'Asset Log', '/assets', Colors.cyan[700]!),
       _ActionItem(Icons.support_agent_rounded, 'Helpdesk Support', '/helpdesk', Colors.orange[800]!),
+      _ActionItem(Icons.school_rounded, 'Training Hub', '/learning', Colors.orange[800]!),
+      _ActionItem(Icons.rate_review_rounded, 'Appraisals', '/performance', Colors.pink[600]!),
       _ActionItem(Icons.group_rounded, 'Directory', '/directory', Colors.teal[700]!),
-      _ActionItem(Icons.chat_bubble_rounded, 'Socket Chat', '/chat', Colors.blue[700]!),
+      _ActionItem(Icons.chat_bubble_rounded, 'Live Chat', '/chat', Colors.blue[700]!),
     ];
 
     return GridView.builder(

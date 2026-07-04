@@ -22,9 +22,9 @@ class HelpdeskTicket {
   factory HelpdeskTicket.fromJson(Map<String, dynamic> json) {
     return HelpdeskTicket(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
+      title: json['subject']?.toString() ?? json['title']?.toString() ?? 'Support Ticket',
       description: json['description']?.toString() ?? '',
-      category: json['category']?.toString() ?? 'IT',
+      category: json['category']?.toString() ?? 'IT Support',
       priority: json['priority']?.toString() ?? 'Medium',
       status: json['status']?.toString() ?? 'Open',
       dateCreated: json['createdAt']?.toString() ?? json['dateCreated']?.toString() ?? '',

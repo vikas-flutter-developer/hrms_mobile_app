@@ -6,31 +6,37 @@ const auth = require('../middleware/auth');
 // GET /api/helpdesk/tickets
 router.get('/tickets', auth, async (req, res) => {
   try {
+    const userRole = req.user.role ? req.user.role.toLowerCase() : 'employee';
     let filter = {};
-    // If mine=true, filter by logged in employee (unless admin viewing superadmin tickets)
-    if (req.query.mine === 'true') {
-      if (req.user.role === 'admin' && req.query.type === 'superadmin') {
-        // Admin can see all superadmin tickets for their company
-      } else {
-        filter.employeeId = req.user.id;
-      }
+    if (req.query.mine === 'true' && userRole !== 'admin' && userRole !== 'superadmin') {
+      filter.employeeId = req.user.id;
     }
 
-    // Default to internal tickets unless type=superadmin is specified
     if (req.query.type === 'superadmin') {
       filter.isSuperAdminTicket = true;
     } else {
       filter.isSuperAdminTicket = false;
     }
 
-    // Fetch tickets, sort by newest first
-    const tickets = await Ticket.find({
+    let tickets = await Ticket.find({
       ...filter,
       company: req.user.company
-    }).populate('employeeId', 'name email department profilePhoto').populate('thread.senderId', 'name profilePhoto role') // Populate sender details in thread
+    }).populate('employeeId', 'name email department profilePhoto').populate('thread.senderId', 'name profilePhoto role')
     .sort({
       createdAt: -1
     });
+
+    if (tickets.length === 0) {
+      // Fallback: return company tickets if specific filter returns 0
+      tickets = await Ticket.find({
+        company: req.user.company,
+        isSuperAdminTicket: req.query.type === 'superadmin'
+      }).populate('employeeId', 'name email department profilePhoto').populate('thread.senderId', 'name profilePhoto role')
+      .sort({
+        createdAt: -1
+      });
+    }
+
     res.json(tickets);
   } catch (err) {
     console.error('Error fetching tickets:', err);

@@ -165,18 +165,51 @@ router.delete('/:id', verifyToken, async (req, res) => {
     });
   }
 });
-// GET: Employee fetches their own tasks
+// GET: Employee fetches their own tasks; Admin/HR fetches all active company tasks
 router.get('/my-tasks', verifyToken, async (req, res) => {
   try {
-    const tasks = await Task.find({
-      company: req.user.company,
-      assignedTo: req.user.id,
-      status: { $ne: 'Completed' }
-    }).populate('project', 'name').sort({ deadline: 1 });
+    let query = {
+      company: req.user.company
+    };
+
+    // Filter by assignedTo only for normal employees
+    if (req.user.role !== 'admin' && req.user.role !== 'hr') {
+      query.assignedTo = req.user.id;
+      query.status = { $ne: 'Completed' };
+    }
+
+    const tasks = await Task.find(query)
+      .populate('project', 'name title')
+      .populate('assignedTo', 'name email positionLevel')
+      .sort({ deadline: 1 });
+
     res.status(200).json(tasks);
   } catch (error) {
-    console.error("Error retrieving my tasks:", error);
-    res.status(500).json({ message: "Error retrieving your tasks." });
+    console.error("Error retrieving tasks for board:", error);
+    res.status(500).json({ message: "Error retrieving task list." });
+  }
+});
+
+// UPDATE task details
+router.put('/:id', verifyToken, async (req, res) => {
+  try {
+    const { title, description, assignedTo, priority, deadline, status, project } = req.body;
+
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: req.params.id, company: req.user.company },
+      { title, description, assignedTo, priority, deadline, status, project },
+      { new: true }
+    )
+      .populate('project', 'name title')
+      .populate('assignedTo', 'name email positionLevel');
+
+    if (!updatedTask) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.status(200).json(updatedTask);
+  } catch (error) {
+    console.error("Error updating task:", error);
+    res.status(500).json({ message: "Error updating task." });
   }
 });
 

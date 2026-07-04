@@ -8,6 +8,9 @@ class Asset {
   final double purchaseValue;
   final String? nextMaintenanceDate;
   final String? returnDate;
+  final String? assignedToName;
+  final String? assignedToEmpId;
+  final String? assignedToDept;
 
   Asset({
     required this.id,
@@ -19,9 +22,27 @@ class Asset {
     required this.purchaseValue,
     this.nextMaintenanceDate,
     this.returnDate,
+    this.assignedToName,
+    this.assignedToEmpId,
+    this.assignedToDept,
   });
 
+  static double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
   factory Asset.fromJson(Map<String, dynamic> json) {
+    String? name;
+    String? empId;
+    String? dept;
+    if (json['assignedTo'] is Map) {
+      name = json['assignedTo']['name']?.toString();
+      empId = json['assignedTo']['empId']?.toString();
+      dept = json['assignedTo']['department']?.toString();
+    }
+
     return Asset(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
@@ -29,9 +50,12 @@ class Asset {
       serialNumber: json['serialNumber']?.toString() ?? '',
       condition: json['condition']?.toString() ?? 'Good',
       status: json['status']?.toString() ?? 'Available',
-      purchaseValue: (json['purchaseValue'] as num?)?.toDouble() ?? 0.0,
+      purchaseValue: _parseDouble(json['purchaseValue']),
       nextMaintenanceDate: json['nextMaintenanceDate']?.toString(),
       returnDate: json['returnDate']?.toString(),
+      assignedToName: name,
+      assignedToEmpId: empId,
+      assignedToDept: dept,
     );
   }
 }
@@ -83,8 +107,10 @@ class AssetDamageModel {
   final String assetName;
   final String serialNumber;
   final String description;
-  final String status; // 'Reported', 'Under Repair', 'Resolved'
+  final String status; // 'Reported', 'In Repair', 'Resolved'
   final double repairCost;
+  final String paymentMode; // 'Salary Deduction', 'Lump Sum Payment', 'Company Covered'
+  final bool isDeductedFromSalary;
   final String employeeName;
   final String employeeEmpId;
 
@@ -95,6 +121,8 @@ class AssetDamageModel {
     required this.description,
     required this.status,
     required this.repairCost,
+    required this.paymentMode,
+    required this.isDeductedFromSalary,
     required this.employeeName,
     required this.employeeEmpId,
   });
@@ -114,13 +142,21 @@ class AssetDamageModel {
       sNumber = json['assetId']['serialNumber']?.toString() ?? 'N/A';
     }
 
+    double parseDouble(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
     return AssetDamageModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       assetName: aName,
       serialNumber: sNumber,
       description: json['description']?.toString() ?? '',
       status: json['status']?.toString() ?? 'Reported',
-      repairCost: (json['repairCost'] as num?)?.toDouble() ?? 0.0,
+      repairCost: parseDouble(json['repairCost']),
+      paymentMode: json['paymentMode']?.toString() ?? 'Company Covered',
+      isDeductedFromSalary: json['isDeductedFromSalary'] == true,
       employeeName: name,
       employeeEmpId: empId,
     );
