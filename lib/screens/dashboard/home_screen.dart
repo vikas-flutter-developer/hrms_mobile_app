@@ -309,7 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _ActionItem(Icons.campaign_rounded, 'Notice Board', '/announcements', Colors.amber[800]!),
       _ActionItem(Icons.account_tree_rounded, 'Projects', '/projects', Colors.blue[700]!),
       _ActionItem(Icons.celebration_rounded, 'Events', '/events', Colors.pink[600]!),
-      _ActionItem(Icons.bar_chart_rounded, 'HR Reports', '/reports', Colors.deepPurple),
+      if (isAdminOrHr)
+        _ActionItem(Icons.bar_chart_rounded, 'HR Reports', '/reports', Colors.deepPurple),
       _ActionItem(Icons.calendar_today_rounded, 'Leave Portal', '/leaves', Colors.purple),
       _ActionItem(Icons.receipt_long_rounded, 'Payslip Hub', '/payslips', Colors.amber[800]!),
       _ActionItem(Icons.monetization_on_rounded, 'Loan Tracker', '/loans', Colors.green[700]!),
