@@ -15,6 +15,10 @@ class AuthProvider with ChangeNotifier {
   String? _temp2FAToken;
   String? _simulatedOTP;
 
+  String? _originalSuperAdminToken;
+  String? get originalSuperAdminToken => _originalSuperAdminToken;
+  bool get isImpersonating => _originalSuperAdminToken != null;
+
   AppUser? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -36,6 +40,7 @@ class AuthProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      _originalSuperAdminToken = await _storage.read(key: 'hrms_original_superadmin_token');
       final token = await _storage.read(key: AppConstants.tokenKey);
       if (token != null) {
         // Fetch current user details
@@ -141,12 +146,55 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> impersonate(String token) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final currentToken = await _storage.read(key: AppConstants.tokenKey);
+      if (currentToken != null) {
+        _originalSuperAdminToken = currentToken;
+        await _storage.write(key: 'hrms_original_superadmin_token', value: currentToken);
+      }
+      await _storage.write(key: AppConstants.tokenKey, value: token);
+      await loadProfile();
+    } catch (e) {
+      _errorMessage = _parseError(e);
+      await stopImpersonating();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopImpersonating() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final originalToken = await _storage.read(key: 'hrms_original_superadmin_token');
+      if (originalToken != null) {
+        await _storage.write(key: AppConstants.tokenKey, value: originalToken);
+        _originalSuperAdminToken = null;
+        await _storage.delete(key: 'hrms_original_superadmin_token');
+        await loadProfile();
+      }
+    } catch (e) {
+      _errorMessage = _parseError(e);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     _currentUser = null;
     _twoFactorRequired = false;
     _temp2FAToken = null;
     _simulatedOTP = null;
+    _originalSuperAdminToken = null;
     await _storage.delete(key: AppConstants.tokenKey);
+    await _storage.delete(key: 'hrms_original_superadmin_token');
     notifyListeners();
   }
 

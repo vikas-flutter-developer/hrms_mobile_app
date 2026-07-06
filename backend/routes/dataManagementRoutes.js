@@ -31,4 +31,9 @@ router.get('/backups', analyticsProtector, dataController.getDatabaseBackups);
 router.post('/backup', ownerProtector, dataController.createDatabaseBackup);
 router.post('/restore', ownerProtector, dataController.restoreDatabaseBackup);
 
+// Single Company Backup, Restore & Clear
+router.get('/companies/:id/export', analyticsProtector, dataController.exportSingleCompanyJson);
+router.post('/companies/:id/restore', ownerProtector, upload.single('backup'), dataController.restoreSingleCompanyJson);
+router.post('/companies/:id/clear-data', ownerProtector, dataController.clearSingleCompanyData);
+
 module.exports = router;

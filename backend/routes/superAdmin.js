@@ -807,6 +807,30 @@ router.get('/dashboard-analytics', async (req, res) => {
 
         const churnRate = totalCompanies > 0 ? Math.round(((suspended + blacklisted) / totalCompanies) * 100) : 0;
 
+        // --- COMPANY REGISTRATION TREND ---
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1);
+        sixMonthsAgo.setHours(0, 0, 0, 0);
+
+        const monthlyGrowth = {};
+        companies.forEach(comp => {
+            const d = new Date(comp.createdAt);
+            if (d >= sixMonthsAgo) {
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                monthlyGrowth[key] = (monthlyGrowth[key] || 0) + 1;
+            }
+        });
+
+        const companyTrend = [];
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const label = d.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
+            companyTrend.push({ month: label, newCompanies: monthlyGrowth[key] || 0 });
+        }
+
         // --- 2. USER STATS ---
         const totalEmployees = await Employee.countDocuments();
         const hrCount = await Employee.countDocuments({ role: { $regex: /^hr$/i } });
@@ -1035,7 +1059,8 @@ router.get('/dashboard-analytics', async (req, res) => {
                 byIndustry,
                 bySize,
                 geographic,
-                churnRate
+                churnRate,
+                trend: companyTrend
             },
             userStats: {
                 totalUsers,

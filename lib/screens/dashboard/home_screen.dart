@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/hr_provider.dart';
+import '../superadmin/superadmin_dashboard.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,6 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    if (user.isSuperAdmin) {
+      return const SuperAdminDashboardScreen();
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC), // Slate 50
       appBar: AppBar(
@@ -56,7 +61,40 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: Column(
+        children: [
+          if (auth.isImpersonating)
+            Container(
+              color: Colors.amber[850],
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.security_rounded, color: Colors.white, size: 22),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      'Currently Impersonating: ${user.companyName ?? "Workspace Admin"} Dashboard (CEO: ${user.name})',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await auth.stopImpersonating();
+                    },
+                    icon: const Icon(Icons.exit_to_app_rounded, size: 16),
+                    label: const Text('Exit Session', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.amber[900],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
         onRefresh: () async {
           await hr.fetchNotifications();
           await hr.fetchAttendanceStatus();
@@ -104,6 +142,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+            ),
+        ],
       ),
     );
   }

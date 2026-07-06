@@ -36,14 +36,6 @@ router.get('/', verifyToken, async (req, res) => {
       title: { $not: /^Leave Request/i }
     }).populate('createdBy', 'name').sort({ createdAt: -1 });
 
-    // Fallback: if company has 0 valid announcements, show all company-agnostic active ones
-    if (announcements.length === 0) {
-      announcements = await Announcement.find({
-        ...expiryFilter,
-        title: { $not: /^Leave Request/i }
-      }).populate('createdBy', 'name').sort({ createdAt: -1 });
-    }
-
     res.status(200).json(announcements);
   } catch (err) {
     res.status(500).json({ message: err.message });

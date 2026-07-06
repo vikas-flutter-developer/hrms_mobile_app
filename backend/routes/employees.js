@@ -13,6 +13,8 @@ const QRCode = require('qrcode');
 const Employee = require('../models/Employee');
 const Admin = require('../models/Admin');
 const Department = require('../models/Department');
+const Superadmin = require('../models/Superadmin');
+
 
 // 🔄 NEW: Import Attendance and Leave models for the Insights route
 const Attendance = require('../models/Attendance');
@@ -391,11 +393,16 @@ router.get('/profile', verifyToken, async (req, res) => {
     const userRole = req.user && req.user.role ? req.user.role.toLowerCase() : 'employee';
     let userRecord = null;
 
-    // Dynamic lookup depending on whether the user is an Admin or an Employee/HR
+    // Dynamic lookup depending on whether the user is an Admin, Superadmin, or an Employee/HR
     if (userRole === 'admin') {
       userRecord = await Admin.findById(req.user.id).select('-password').lean();
       if (userRecord) {
         userRecord.role = 'admin';
+      }
+    } else if (userRole === 'superadmin') {
+      userRecord = await Superadmin.findById(req.user.id).select('-password').lean();
+      if (userRecord) {
+        userRecord.role = 'superadmin';
       }
     } else {
       // This safely pulls both standard employees AND HR personnel profiles with company info

@@ -10,335 +10,628 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'Employee'; // Default role select options
+  String _selectedRole = 'Employee';
   bool _obscurePassword = true;
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
 
-  final List<String> _roles = ['Employee', 'HR', 'Admin'];
+  final List<String> _roles = ['Employee', 'HR', 'Admin', 'SuperAdmin'];
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.05),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
+    _animController.forward();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _animController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.login(
       _emailController.text.trim(),
       _passwordController.text,
       _selectedRole.toLowerCase(),
     );
-
     if (!mounted) return;
-
     if (success) {
-      // Direct login without 2FA
       Navigator.pushReplacementNamed(context, '/home');
     } else if (auth.twoFactorRequired) {
-      // Redirect to OTP verification screen
       Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const OtpScreen(),
-        ),
-      );
+          context, MaterialPageRoute(builder: (_) => const OtpScreen()));
     } else if (auth.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.errorMessage!),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(auth.errorMessage!),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 800;
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFEFF6FF), // Blue 50
-              Color(0xFFDBEAFE), // Blue 100
-            ],
+      body: isMobile ? _buildMobileLayout(auth) : _buildDesktopLayout(auth),
+    );
+  }
+
+  // ─── DESKTOP LAYOUT (Two-panel) ───────────────────────────────────────────
+  Widget _buildDesktopLayout(AuthProvider auth) {
+    return Row(
+      children: [
+        // ── Left Branding Panel ─────────────────────────────────────────────
+        Expanded(
+          flex: 5,
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0F172A),
+                  Color(0xFF1E3A5F),
+                  Color(0xFF1D4ED8),
+                ],
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Stack(
+              children: [
+                // Decorative circles
+                Positioned(
+                  top: -80,
+                  left: -80,
+                  child: Container(
+                    width: 300,
+                    height: 300,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.03),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -100,
+                  right: -60,
+                  child: Container(
+                    width: 350,
+                    height: 350,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.04),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 200,
+                  right: -40,
+                  child: Container(
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.05),
+                    ),
+                  ),
+                ),
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(56.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Logo
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(Icons.blur_on_rounded,
+                                color: Colors.white, size: 28),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'HRMS',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      // Main copy
+                      const Text(
+                        'Enterprise\nHR Management\nPlatform',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 42,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Manage your entire workforce from a single\npowerful platform. Payroll, attendance,\nleaves, and more — unified.',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.65),
+                          fontSize: 15,
+                          height: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 48),
+                      // Feature pills
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _buildFeaturePill(Icons.people_rounded, 'Employee Management'),
+                          _buildFeaturePill(Icons.payments_rounded, 'Payroll Processing'),
+                          _buildFeaturePill(Icons.access_time_rounded, 'Attendance Tracking'),
+                          _buildFeaturePill(Icons.beach_access_rounded, 'Leave Management'),
+                        ],
+                      ),
+                      const SizedBox(height: 48),
+                      // Stats row
+                      Row(
+                        children: [
+                          _buildStat('500+', 'Companies'),
+                          const SizedBox(width: 40),
+                          _buildStat('50K+', 'Employees'),
+                          const SizedBox(width: 40),
+                          _buildStat('99.9%', 'Uptime'),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Premium Logo Icon
-                    const Icon(
-                      Icons.blur_on_rounded,
-                      size: 80,
-                      color: Color(0xFF2563EB), // Blue 600
+
+        // ── Right Form Panel ────────────────────────────────────────────────
+        Expanded(
+          flex: 4,
+          child: Container(
+            color: const Color(0xFFF8FAFC),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: SlideTransition(
+                    position: _slideAnim,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: _buildFormContent(auth),
                     ),
-                    const SizedBox(height: 16),
-                    // Title
-                    const Text(
-                      'HRMS Workspace',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A), // Slate 900
-                        letterSpacing: 0.5,
-                      ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── MOBILE LAYOUT (Single column) ────────────────────────────────────────
+  Widget _buildMobileLayout(AuthProvider auth) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0F172A), Color(0xFF1E3A5F)],
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Mobile Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.blur_on_rounded,
+                              color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('HRMS Workspace',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1)),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Access your employee self-service portal',
-                      textAlign: TextAlign.center,
+                    Text(
+                      'Enterprise HR Management Platform',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF475569), // Slate 600
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    
-                    // Card Box
-                    Card(
-                      elevation: 4,
-                      color: Colors.white,
-                      shadowColor: const Color(0x200F172A),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Email Field
-                            TextFormField(
-                              controller: _emailController,
-                              style: const TextStyle(color: Color(0xFF0F172A)),
-                              decoration: InputDecoration(
-                                labelText: 'Email Address',
-                                labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                                prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF64748B)),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                                ),
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter email';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            
-                            // Password Field
-                            TextFormField(
-                              controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              style: const TextStyle(color: Color(0xFF0F172A)),
-                              decoration: InputDecoration(
-                                labelText: 'Password',
-                                labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                                prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF64748B)),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter password';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
- 
-                            // Role Selection Dropdown
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFCBD5E1)),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _selectedRole,
-                                  dropdownColor: Colors.white,
-                                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 16),
-                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                                  isExpanded: true,
-                                  onChanged: (String? newValue) {
-                                    if (newValue != null) {
-                                      setState(() {
-                                        _selectedRole = newValue;
-                                      });
-                                    }
-                                  },
-                                  items: _roles.map<DropdownMenuItem<String>>((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
- 
-                            // Submit Button
-                            ElevatedButton(
-                              onPressed: auth.isLoading ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFF43F5E), // Rose 500
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: auth.isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Sign In',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Testing Shortcuts',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF475569),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildShortcutButton(
-                          label: 'Admin',
-                          email: 'admin@nexora.in',
-                          password: 'Admin@123',
-                          role: 'Admin',
-                        ),
-                        _buildShortcutButton(
-                          label: 'HR',
-                          email: 'hr@test.com',
-                          password: 'password123',
-                          role: 'HR',
-                        ),
-                        _buildShortcutButton(
-                          label: 'Employee',
-                          email: 'emp@test.com',
-                          password: 'password123',
-                          role: 'Employee',
-                        ),
-                        _buildShortcutButton(
-                          label: 'SuperAdmin',
-                          email: 'ceo@company.com',
-                          password: 'supersecretpassword',
-                          role: 'Admin',
-                        ),
-                      ],
+                          color: Colors.white.withOpacity(0.6), fontSize: 13),
                     ),
                   ],
                 ),
               ),
-            ),
+              // Form Card
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: _buildFormContent(auth),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildShortcutButton({
-    required String label,
-    required String email,
-    required String password,
-    required String role,
-  }) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: ElevatedButton(
-          onPressed: () {
-            setState(() {
-              _emailController.text = email;
-              _passwordController.text = password;
-              _selectedRole = role;
-            });
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFE2E8F0), // Slate 200
-            foregroundColor: const Color(0xFF334155), // Slate 700
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+  // ─── SHARED FORM CONTENT ──────────────────────────────────────────────────
+  Widget _buildFormContent(AuthProvider auth) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          const Text(
+            'Welcome back',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              letterSpacing: -0.5,
             ),
           ),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          const SizedBox(height: 6),
+          const Text(
+            'Sign in to your workspace account',
+            style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 36),
+
+          // Email Field
+          _buildLabel('Email Address'),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _emailController,
+            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15),
+            decoration: _inputDecoration(
+              hint: 'you@company.com',
+              icon: Icons.mail_outline_rounded,
+            ),
+            keyboardType: TextInputType.emailAddress,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Please enter your email' : null,
+          ),
+          const SizedBox(height: 20),
+
+          // Password Field
+          _buildLabel('Password'),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15),
+            decoration: _inputDecoration(
+              hint: '••••••••',
+              icon: Icons.lock_outline_rounded,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: const Color(0xFF94A3B8),
+                  size: 20,
+                ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+            ),
+            validator: (v) =>
+                (v == null || v.isEmpty) ? 'Please enter your password' : null,
+          ),
+          const SizedBox(height: 20),
+
+          // Role dropdown
+          _buildLabel('Sign in as'),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedRole,
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15),
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: Color(0xFF94A3B8)),
+                isExpanded: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                borderRadius: BorderRadius.circular(12),
+                onChanged: (String? v) {
+                  if (v != null) setState(() => _selectedRole = v);
+                },
+                items: _roles
+                    .map((r) => DropdownMenuItem(
+                          value: r,
+                          child: Row(
+                            children: [
+                              Icon(_roleIcon(r),
+                                  size: 18, color: const Color(0xFF64748B)),
+                              const SizedBox(width: 10),
+                              Text(r),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Sign In Button
+          SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: auth.isLoading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1D4ED8),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFF93C5FD),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: auth.isLoading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.5),
+                    )
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Sign In',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700)),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Divider
+          Row(
+            children: [
+              const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('Quick Access',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade400,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+              ),
+              const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Shortcut Buttons
+          Row(
+            children: [
+              _buildShortcutButton('Admin', 'admin@nexora.in', 'Admin@123', 'Admin', const Color(0xFF7C3AED)),
+              const SizedBox(width: 8),
+              _buildShortcutButton('HR', 'hr@test.com', 'password123', 'HR', const Color(0xFF0891B2)),
+              const SizedBox(width: 8),
+              _buildShortcutButton('Employee', 'emp@test.com', 'password123', 'Employee', const Color(0xFF059669)),
+              const SizedBox(width: 8),
+              _buildShortcutButton('Super Admin', 'ceo@company.com', 'supersecretpassword', 'SuperAdmin', const Color(0xFFDC2626)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF374151),
+        letterSpacing: 0.1,
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 14),
+      prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1D4ED8), width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildShortcutButton(String label, String email, String password,
+      String role, Color color) {
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() {
+          _emailController.text = email;
+          _passwordController.text = password;
+          _selectedRole = role;
+        }),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.2), width: 1),
+          ),
+          child: Column(
+            children: [
+              Icon(_roleIcon(role), color: color, size: 16),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 0.2),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildFeaturePill(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white.withOpacity(0.85), size: 14),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.85),
+                fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStat(String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 2),
+        Text(label,
+            style:
+                TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12)),
+      ],
+    );
+  }
+
+  IconData _roleIcon(String role) {
+    switch (role) {
+      case 'Admin':
+        return Icons.admin_panel_settings_rounded;
+      case 'HR':
+        return Icons.support_agent_rounded;
+      case 'SuperAdmin':
+        return Icons.shield_rounded;
+      default:
+        return Icons.person_rounded;
+    }
   }
 }

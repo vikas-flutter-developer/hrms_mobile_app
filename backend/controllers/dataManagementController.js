@@ -481,3 +481,250 @@ exports.restoreDatabaseBackup = async (req, res) => {
         res.status(500).json({ success: false, message: "Database restore failed" });
     }
 };
+
+// 📦 Single Company Backup (JSON Export)
+exports.exportSingleCompanyJson = async (req, res) => {
+    try {
+        const companyId = req.params.id;
+        
+        // Find company (admin)
+        const Admin = require('../models/Admin');
+        const company = await Admin.findById(companyId).lean();
+        if (!company) {
+            return res.status(404).json({ success: false, message: "Company not found" });
+        }
+
+        // List of all models that are linked to the company
+        const Employee = require('../models/Employee');
+        const Department = require('../models/Department');
+        const Designation = require('../models/Designation');
+        const CustomRole = require('../models/CustomRole');
+        const Holiday = require('../models/Holiday');
+        const LeavePolicy = require('../models/LeavePolicy');
+        const Leave = require('../models/Leave');
+        const Attendance = require('../models/Attendance');
+        const Payslip = require('../models/Payslip');
+        const Asset = require('../models/Asset');
+        const Expense = require('../models/Expense');
+        const Project = require('../models/Project');
+        const Task = require('../models/Task');
+        const Announcement = require('../models/Announcement');
+        const Event = require('../models/Event');
+
+        const [
+            employees,
+            departments,
+            designations,
+            customRoles,
+            holidays,
+            leavePolicies,
+            leaves,
+            attendances,
+            payslips,
+            assets,
+            expenses,
+            projects,
+            tasks,
+            announcements,
+            events
+        ] = await Promise.all([
+            Employee.find({ company: companyId }).lean(),
+            Department.find({ company: companyId }).lean(),
+            Designation.find({ company: companyId }).lean(),
+            CustomRole.find({ company: companyId }).lean(),
+            Holiday.find({ company: companyId }).lean(),
+            LeavePolicy.find({ company: companyId }).lean(),
+            Leave.find({ company: companyId }).lean(),
+            Attendance.find({ company: companyId }).lean(),
+            Payslip.find({ company: companyId }).lean(),
+            Asset.find({ company: companyId }).lean(),
+            Expense.find({ company: companyId }).lean(),
+            Project.find({ company: companyId }).lean(),
+            Task.find({ company: companyId }).lean(),
+            Announcement.find({ createdBy: companyId }).lean(),
+            Event.find({ company: companyId }).lean()
+        ]);
+
+        const exportData = {
+            companyId,
+            exportedAt: new Date().toISOString(),
+            company,
+            employees,
+            departments,
+            designations,
+            customRoles,
+            holidays,
+            leavePolicies,
+            leaves,
+            attendances,
+            payslips,
+            assets,
+            expenses,
+            projects,
+            tasks,
+            announcements,
+            events
+        };
+
+        const cleanName = (company.companyName || 'Company').replace(/[^a-zA-Z0-9]/g, '_');
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename=Company_${cleanName}_Backup_${Date.now()}.json`);
+        res.status(200).send(JSON.stringify(exportData, null, 2));
+    } catch (error) {
+        console.error("Single Company JSON Export Error:", error);
+        res.status(500).json({ success: false, message: "Internal server error during single company JSON data export" });
+    }
+};
+
+// 🔄 Single Company Restore (JSON Import)
+exports.restoreSingleCompanyJson = async (req, res) => {
+    try {
+        const companyId = req.params.id;
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: "No backup file detected. Please upload a valid JSON backup." });
+        }
+
+        const rawJsonStr = req.file.buffer.toString('utf-8');
+        const parsedData = JSON.parse(rawJsonStr);
+
+        if (parsedData.companyId !== companyId) {
+            return res.status(400).json({ success: false, message: "Backup file ID mismatch. The backup file does not belong to this company." });
+        }
+
+        // List of all models to purge and insert
+        const models = {
+            employees: { Model: require('../models/Employee'), query: { company: companyId } },
+            departments: { Model: require('../models/Department'), query: { company: companyId } },
+            designations: { Model: require('../models/Designation'), query: { company: companyId } },
+            customRoles: { Model: require('../models/CustomRole'), query: { company: companyId } },
+            holidays: { Model: require('../models/Holiday'), query: { company: companyId } },
+            leavePolicies: { Model: require('../models/LeavePolicy'), query: { company: companyId } },
+            leaves: { Model: require('../models/Leave'), query: { company: companyId } },
+            attendances: { Model: require('../models/Attendance'), query: { company: companyId } },
+            payslips: { Model: require('../models/Payslip'), query: { company: companyId } },
+            assets: { Model: require('../models/Asset'), query: { company: companyId } },
+            expenses: { Model: require('../models/Expense'), query: { company: companyId } },
+            projects: { Model: require('../models/Project'), query: { company: companyId } },
+            tasks: { Model: require('../models/Task'), query: { company: companyId } },
+            announcements: { Model: require('../models/Announcement'), query: { createdBy: companyId } },
+            events: { Model: require('../models/Event'), query: { company: companyId } }
+        };
+
+        let recordsRestored = 0;
+
+        // Perform clean and restore
+        for (const [key, config] of Object.entries(models)) {
+            // Delete current data
+            await config.Model.deleteMany(config.query);
+            
+            // Insert backup data
+            if (parsedData[key] && Array.isArray(parsedData[key]) && parsedData[key].length > 0) {
+                try {
+                    const result = await config.Model.insertMany(parsedData[key], { ordered: false });
+                    recordsRestored += result.length;
+                } catch (err) {
+                    if (err.insertedDocs) {
+                        recordsRestored += err.insertedDocs.length;
+                    }
+                }
+            }
+        }
+
+        // Update main Admin profile settings if present
+        if (parsedData.company) {
+            const Admin = require('../models/Admin');
+            delete parsedData.company._id; // Ensure we don't try to change immutable _id
+            await Admin.findByIdAndUpdate(companyId, parsedData.company);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Successfully restored company workspace! Synchronized ${recordsRestored} records across modules.`,
+            recordsRestored
+        });
+
+    } catch (error) {
+        console.error("Single Company JSON Restore Error:", error);
+        res.status(500).json({ success: false, message: "Failed to restore company data. Check if JSON file is corrupted." });
+    }
+};
+
+// 🧼 11. Clear Operational Data of a Single Company (keep admin record)
+exports.clearSingleCompanyData = async (req, res) => {
+    try {
+        const companyId = req.params.id;
+        
+        // Find company (admin) to verify it exists
+        const Admin = require('../models/Admin');
+        const company = await Admin.findById(companyId);
+        if (!company) {
+            return res.status(404).json({ success: false, message: "Company not found" });
+        }
+
+        // List of all models to purge
+        const models = {
+            employees: require('../models/Employee'),
+            departments: require('../models/Department'),
+            designations: require('../models/Designation'),
+            customRoles: require('../models/CustomRole'),
+            holidays: require('../models/Holiday'),
+            leavePolicies: require('../models/LeavePolicy'),
+            leaves: require('../models/Leave'),
+            attendances: require('../models/Attendance'),
+            payslips: require('../models/Payslip'),
+            assets: require('../models/Asset'),
+            expenses: require('../models/Expense'),
+            projects: require('../models/Project'),
+            tasks: require('../models/Task'),
+            announcements: require('../models/Announcement'),
+            events: require('../models/Event')
+        };
+
+        let recordsPurged = 0;
+
+        // Perform clear
+        for (const [key, Model] of Object.entries(models)) {
+            let query = {};
+            if (key === 'announcements') {
+                query = { createdBy: companyId };
+            } else {
+                query = { company: companyId };
+            }
+            const result = await Model.deleteMany(query);
+            recordsPurged += result.deletedCount;
+        }
+
+        // Also clean custom departments, custom roles, signature, and settings inside the company admin record
+        company.customDepartments = [];
+        company.customRoles = [];
+        company.signature = '';
+        company.smtpSettings = { host: '', port: 587, user: '', pass: '' };
+        company.ipWhitelist = '';
+        company.attendanceSettings = {
+            enableBiometric: false,
+            biometricApiKey: '',
+            enableMobileCheckIn: false,
+            enableQRCode: false,
+            qrCodeData: ''
+        };
+        await company.save();
+
+        // Audit log
+        const SecurityLog = require('../models/SecurityLog');
+        await SecurityLog.create({
+            userRole: 'Super Admin',
+            companyName: company.companyName,
+            category: 'ADMIN_ACTION',
+            details: `Cleared all operational data (${recordsPurged} records) for company: ${company.companyName} (Admin ID: ${companyId})`,
+            severity: 'Warning'
+        }).catch(() => {});
+
+        res.status(200).json({
+            success: true,
+            message: `Successfully cleared all operational data for "${company.companyName}". ${recordsPurged} records purged. Company admin account is preserved.`
+        });
+    } catch (error) {
+        console.error("Clear Company Data Error:", error);
+        res.status(500).json({ success: false, message: "Failed to clear company data. Please try again." });
+    }
+};
