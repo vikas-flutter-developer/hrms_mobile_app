@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/hr_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../models/app_user.dart';
 
 class DirectoryScreen extends StatefulWidget {
   const DirectoryScreen({super.key});
@@ -80,9 +81,14 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                   shadowColor: const Color(0x100F172A),
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: isAdminOrHr
+                        ? () => _showEmployeeActionOptionsSheet(context, member)
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
                       children: [
                         CircleAvatar(
                           radius: 26,
@@ -115,7 +121,6 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                             ],
                           ),
                         ),
-                        
                         // Launcher Actions Group
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -139,8 +144,9 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                       ],
                     ),
                   ),
-                );
-              },
+                ),
+              );
+            },
             ),
       floatingActionButton: isAdminOrHr
           ? FloatingActionButton.extended(
@@ -165,6 +171,17 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
     String selectedDept = 'Engineering';
     final depts = ['Engineering', 'HR', 'Marketing', 'Sales', 'Design', 'Product'];
     final formKey = GlobalKey<FormState>();
+    final designationsList = [
+      'Software Engineer',
+      'Intern',
+      'Student',
+      'Internship Trainee',
+      'HR Manager',
+      'Project Manager',
+      'Sales Representative',
+      'Marketing Specialist',
+      'Designer',
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -244,12 +261,35 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
-                              controller: designationCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Designation / Role',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
+                            child: Autocomplete<String>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (textEditingValue.text.isEmpty) {
+                                  return designationsList;
+                                }
+                                return designationsList.where((String option) {
+                                  return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                });
+                              },
+                              onSelected: (String selection) {
+                                designationCtrl.text = selection;
+                              },
+                              fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                                if (textEditingController.text.isEmpty && designationCtrl.text.isNotEmpty) {
+                                  textEditingController.text = designationCtrl.text;
+                                }
+                                textEditingController.addListener(() {
+                                  designationCtrl.text = textEditingController.text;
+                                });
+                                return TextFormField(
+                                  controller: textEditingController,
+                                  focusNode: focusNode,
+                                  decoration: InputDecoration(
+                                    labelText: 'Designation / Role',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                );
+                              },
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -335,6 +375,421 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: const Text('Add & Onboard Employee', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEmployeeActionOptionsSheet(BuildContext context, AppUser employee) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Actions for ${employee.name}',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'ID: ${employee.empId ?? 'N/A'} • ${employee.positionLevel ?? 'Staff'}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.trending_up_rounded, color: Color(0xFF10B981)),
+                title: const Text('Promote Employee', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Change designation and adjust salary logs'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showPromoteModal(context, employee);
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              ListTile(
+                leading: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF2563EB)),
+                title: const Text('Transfer / Relocate', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Transfer to another department or work location'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showTransferModal(context, employee);
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              ListTile(
+                leading: const Icon(Icons.no_accounts_rounded, color: Color(0xFFEF4444)),
+                title: const Text('Offboard Staff', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+                subtitle: const Text('Initiate FNF, log exit interviews and deactivate profile'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showOffboardModal(context, employee);
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPromoteModal(BuildContext context, AppUser employee) {
+    final formKey = GlobalKey<FormState>();
+    final roleCtrl = TextEditingController(text: employee.positionLevel);
+    final salaryCtrl = TextEditingController(text: '65000');
+    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final notesCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '📈 Promote Employee',
+                        style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: roleCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'New Designation / Role',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: salaryCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'New Base Salary (₹)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: dateCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Effective Date',
+                          hintText: 'YYYY-MM-DD',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: notesCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Promotion Notes',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final hr = Provider.of<HrProvider>(context, listen: false);
+                          final success = await hr.promoteEmployee(
+                            employeeId: employee.id,
+                            newRole: roleCtrl.text.trim(),
+                            newSalary: double.tryParse(salaryCtrl.text) ?? 65000,
+                            effectiveDate: dateCtrl.text.trim(),
+                            notes: notesCtrl.text.trim(),
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? 'Employee promoted successfully!' : 'Failed to promote employee.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Confirm Promotion', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTransferModal(BuildContext context, AppUser employee) {
+    final formKey = GlobalKey<FormState>();
+    String selectedDept = employee.department ?? 'Engineering';
+    String selectedLoc = 'Office';
+    final depts = ['Engineering', 'HR', 'Marketing', 'Sales', 'Design', 'Product'];
+    final locs = ['Office', 'Remote', 'Hybrid'];
+    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final notesCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '🔄 Transfer / Relocate Employee',
+                        style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: depts.contains(selectedDept) ? selectedDept : depts.first,
+                        decoration: InputDecoration(
+                          labelText: 'New Department',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: depts.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => selectedDept = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedLoc,
+                        decoration: InputDecoration(
+                          labelText: 'New Work Location',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: locs.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => selectedLoc = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: dateCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Effective Date',
+                          hintText: 'YYYY-MM-DD',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: notesCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Transfer Notes',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final hr = Provider.of<HrProvider>(context, listen: false);
+                          final success = await hr.transferEmployee(
+                            employeeId: employee.id,
+                            newDepartment: selectedDept,
+                            newWorkLocation: selectedLoc,
+                            effectiveDate: dateCtrl.text.trim(),
+                            notes: notesCtrl.text.trim(),
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? 'Employee transferred successfully!' : 'Failed to transfer employee.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Confirm Transfer', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showOffboardModal(BuildContext context, AppUser employee) {
+    final formKey = GlobalKey<FormState>();
+    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final reasonCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final interviewCtrl = TextEditingController();
+    bool initiateFnf = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '❌ Offboard Employee',
+                        style: TextStyle(color: Color(0xFFEF4444), fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: dateCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Exit Date',
+                          hintText: 'YYYY-MM-DD',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: reasonCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Exit Reason (e.g. Resignation, Terminated)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: notesCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Exit Notes',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: interviewCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Exit Interview Comments',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        title: const Text('Initiate Full & Final (FNF)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        value: initiateFnf,
+                        activeColor: const Color(0xFFEF4444),
+                        onChanged: (v) => setModalState(() => initiateFnf = v),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final hr = Provider.of<HrProvider>(context, listen: false);
+                          final success = await hr.offboardEmployee(
+                            employeeId: employee.id,
+                            exitDate: dateCtrl.text.trim(),
+                            exitReason: reasonCtrl.text.trim(),
+                            exitNotes: notesCtrl.text.trim(),
+                            exitInterviewNotes: interviewCtrl.text.trim(),
+                            initiateFnf: initiateFnf,
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? 'Employee offboarded successfully!' : 'Failed to offboard employee.'),
+                                backgroundColor: success ? Colors.green : Colors.redAccent,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEF4444),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Confirm Offboarding', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(height: 20),
                     ],

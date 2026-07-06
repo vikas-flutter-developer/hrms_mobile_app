@@ -1576,4 +1576,90 @@ class HrProvider with ChangeNotifier {
       return false;
     }
   }
+
+  Future<bool> promoteEmployee({
+    required String employeeId,
+    required String newRole,
+    required double newSalary,
+    required String effectiveDate,
+    required String notes,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/employees/$employeeId/promote', data: {
+        'newRole': newRole,
+        'newSalary': newSalary,
+        'effectiveDate': effectiveDate,
+        'notes': notes,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTeam();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Promote employee error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> transferEmployee({
+    required String employeeId,
+    required String newDepartment,
+    required String newWorkLocation,
+    required String effectiveDate,
+    required String notes,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/employees/$employeeId/transfer', data: {
+        'newDepartment': newDepartment,
+        'newWorkLocation': newWorkLocation,
+        'effectiveDate': effectiveDate,
+        'notes': notes,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTeam();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Transfer employee error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> offboardEmployee({
+    required String employeeId,
+    required String exitDate,
+    required String exitReason,
+    required String exitNotes,
+    required String exitInterviewNotes,
+    required bool initiateFnf,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/employees/$employeeId/offboard', data: {
+        'exitDate': exitDate,
+        'exitReason': exitReason,
+        'exitNotes': exitNotes,
+        'exitInterviewNotes': exitInterviewNotes,
+        'initiateFnf': initiateFnf,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        await fetchMyTeam();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Offboard employee error: $e');
+      return false;
+    }
+  }
 }

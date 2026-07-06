@@ -127,8 +127,8 @@ async function run() {
         const statusPool = ['Present', 'Present', 'Present', 'Late', 'Present', 'Present', 'Leave', 'Present', 'Half-Day', 'Present', 'Present', 'Present', 'Absent', 'Present', 'Present'];
 
         for (const targetEmp of allTargetEmps) {
-            // July 2026 (Days 1 to 15)
-            for (let day = 1; day <= 15; day++) {
+            // July 2026 (Days 1 to 6 - since today is July 6, 2026)
+            for (let day = 1; day <= 6; day++) {
                 const dayStr = String(day).padStart(2, '0');
                 const dateStr = `2026-07-${dayStr}`;
                 const status = statusPool[(day + targetEmp.name.length) % statusPool.length];
@@ -222,10 +222,17 @@ async function run() {
         ];
         const leaveStatuses = ['Pending', 'Approved', 'Rejected', 'Approved', 'Rejected', 'Pending', 'Approved', 'Approved', 'Pending', 'Approved'];
         for (let i = 0; i < 10; i++) {
-            const start = new Date();
-            start.setDate(start.getDate() + (i + 1) * 3);
-            const end = new Date(start);
-            end.setDate(end.getDate() + 1);
+            let start = new Date();
+            let end = new Date();
+            if (i === 0 || i === 1) {
+                // Approved leaves covering today (July 6, 2026)
+                start = new Date('2026-07-05');
+                end = new Date('2026-07-07');
+            } else {
+                start.setDate(start.getDate() + (i + 1) * 3);
+                end = new Date(start);
+                end.setDate(end.getDate() + 1);
+            }
 
             const targetEmp = seededEmployees[i % seededEmployees.length];
             const lvEmp = new Leave({
@@ -237,9 +244,9 @@ async function run() {
                 endDate: end.toISOString().split('T')[0],
                 days: 2,
                 reason: leaveReasons[i],
-                status: leaveStatuses[i],
+                status: (i === 0 || i === 1) ? 'Approved' : leaveStatuses[i],
                 isLOP: false,
-                actionedByName: leaveStatuses[i] !== 'Pending' ? 'Admin Team' : ''
+                actionedByName: ((i === 0 || i === 1) || leaveStatuses[i] !== 'Pending') ? 'Admin Team' : ''
             });
             await lvEmp.save();
         }
@@ -274,7 +281,8 @@ async function run() {
 
         // --- 6. Payslips (10 items for Staff Employees and Employee) ---
         console.log("Seeding Payslips...");
-        const months = ["May 2026", "April 2026", "March 2026", "February 2026", "January 2026", "December 2025", "November 2025", "October 2025", "September 2025", "August 2025"];
+        const currentMonthStr = new Date().toLocaleString('default', { month: 'short', year: 'numeric' }); // e.g. "Jul 2026"
+        const months = [currentMonthStr, "June 2026", "May 2026", "April 2026", "March 2026", "February 2026", "January 2026", "December 2025", "November 2025", "October 2025"];
         for (let i = 0; i < 10; i++) {
             const targetEmp = seededEmployees[i % seededEmployees.length];
             const psStaff = new Payslip({
@@ -296,7 +304,7 @@ async function run() {
                 lopDeduction: 0,
                 loanEmi: i < 3 ? 3000 : 0,
                 netPay: 60000 + (i * 1000),
-                status: 'Paid',
+                status: i === 0 ? 'Processed' : 'Paid',
                 paymentDate: new Date()
             });
             await psStaff.save();
@@ -320,7 +328,7 @@ async function run() {
                 lopDeduction: 0,
                 loanEmi: i < 3 ? 3000 : 0,
                 netPay: 55000 + (i % 2 === 0 ? 2500 : 0) - (i < 3 ? 3000 : 0),
-                status: 'Paid',
+                status: i === 0 ? 'Processed' : 'Paid',
                 paymentDate: new Date()
             });
             await psEmp.save();

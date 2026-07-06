@@ -1129,7 +1129,7 @@ class _LeavePortalScreenState extends State<LeavePortalScreen> with SingleTicker
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            '${req.type} Leave (${req.days} days)',
+                            '${req.type.toString().toLowerCase().endsWith('leave') ? req.type : '${req.type} Leave'} (${req.days} days)',
                             style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           subtitle: Column(

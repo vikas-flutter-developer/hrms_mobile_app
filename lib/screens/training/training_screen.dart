@@ -320,6 +320,11 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final hr = Provider.of<HrProvider>(context, listen: false);
       hr.fetchTrainingPrograms();
@@ -975,7 +980,7 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
               },
               backgroundColor: const Color(0xFF0284C7),
               icon: const Icon(Icons.add, color: Colors.white),
-              label: Text(_tabController.index == 0 ? 'Assign Staff' : 'Create Course', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: Text(_tabController.index == 0 ? 'Enroll Staff' : 'Add Course', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
           : null,
     );

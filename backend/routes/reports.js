@@ -43,7 +43,7 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
       }
     }]), Candidate.aggregate([{
       $match: {
-        company: req.user.company
+        company: new mongoose.Types.ObjectId(req.user.company)
       }
     }, {
       $group: {
@@ -62,9 +62,8 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
     }).sort({
       date: 1
     }).limit(3), Employee.find({
-      company: req.user.company,
-      status: 'Active'
-    }, 'name dob joinDate archivedAt status'), Admin.findById(req.user.company) // Assuming single admin or fetch by company
+      company: req.user.company
+    }, 'name dob joinDate archivedAt status empId department positionLevel email salary'), Admin.findById(req.user.company) // Assuming single admin or fetch by company
     ]);
 
     // Process Attendance
@@ -93,6 +92,9 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
     const events = [];
     let joinedThisMonth = 0;
     let exitedThisMonth = 0;
+    const joinedEmployeesList = [];
+    const exitedEmployeesList = [];
+
     employees.forEach(emp => {
       if (emp.dob) {
         const dobObj = new Date(emp.dob);
@@ -119,6 +121,33 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
           }
           if (joinDateObj.getFullYear() === today.getFullYear()) {
             joinedThisMonth++;
+            joinedEmployeesList.push({
+              id: emp._id,
+              name: emp.name,
+              empId: emp.empId || 'N/A',
+              department: emp.department || 'General',
+              positionLevel: emp.positionLevel || 'Staff',
+              email: emp.email || '',
+              joinDate: emp.joinDate
+            });
+          }
+        }
+      }
+      if (emp.status === 'Notice Period' || emp.status === 'Archived' || emp.status === 'Inactive') {
+        const exitDate = emp.archivedAt || emp.updatedAt;
+        if (exitDate) {
+          const exitDateObj = new Date(exitDate);
+          if (exitDateObj.getMonth() === currentMonth && exitDateObj.getFullYear() === today.getFullYear()) {
+            exitedThisMonth++;
+            exitedEmployeesList.push({
+              id: emp._id,
+              name: emp.name,
+              empId: emp.empId || 'N/A',
+              department: emp.department || 'General',
+              positionLevel: emp.positionLevel || 'Staff',
+              email: emp.email || '',
+              exitDate: exitDateObj.toISOString().split('T')[0]
+            });
           }
         }
       }
@@ -139,7 +168,7 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
     });
     const CompanySettings = require('../models/CompanySettings');
     const settings = await CompanySettings.findOne({ company: req.user.company });
-    const activeEmployees = await Employee.find({ company: req.user.company, status: 'Active' });
+    const activeEmployees = employees.filter(emp => emp.status === 'Active');
     const salaryCost = activeEmployees.reduce((sum, emp) => sum + (emp.salary || 0), 0);
     const isFinancialApiConnected = settings?.accountingApi?.isConnected || false;
     const revenue = isFinancialApiConnected ? 5200000 : 0;
@@ -161,7 +190,9 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
       events: events.slice(0, 5),
       trends: {
         joined: joinedThisMonth,
-        exited: exitedThisMonth
+        exited: exitedThisMonth,
+        joinedList: joinedEmployeesList,
+        exitedList: exitedEmployeesList
       },
       payrollStatus: processedPayslips > 0 ? 'Processed' : 'Pending',
       subscriptionExpiry: admin ? admin.subscriptionExpiry : null,
@@ -179,6 +210,7 @@ router.get('/dashboard-overview', verifyToken, async (req, res) => {
 });
 router.get('/dashboard-stats', verifyToken, async (req, res) => {
   try {
+    const todayStr = new Date().toISOString().split('T')[0];
     const [totalEmployees, onLeaveToday, pendingExpenses, activeTraining, totalAssets, pendingPerformanceReviews] = await Promise.all([Employee.countDocuments({
       company: req.user.company,
       status: 'Active'
@@ -186,10 +218,10 @@ router.get('/dashboard-stats', verifyToken, async (req, res) => {
       company: req.user.company,
       status: 'Approved',
       startDate: {
-        $lte: new Date()
+        $lte: todayStr
       },
       endDate: {
-        $gte: new Date()
+        $gte: todayStr
       }
     }), Expense.aggregate([{
       $match: {

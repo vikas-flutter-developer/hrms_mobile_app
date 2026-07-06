@@ -159,6 +159,128 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  void _showJoinedExitedBottomSheet(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required List<dynamic> list,
+    required Color accentColor,
+    bool isExit = false,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: const Color(0xFFCBD5E1), borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: list.isEmpty
+                        ? Center(
+                            child: Text(
+                              isExit ? 'No exits logged this month.' : 'No joiners logged this month.',
+                              style: const TextStyle(color: Color(0xFF64748B)),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: list.length,
+                            itemBuilder: (context, index) {
+                              final emp = list[index];
+                              final empName = emp['name']?.toString() ?? 'Staff Member';
+                              final empId = emp['empId']?.toString() ?? 'N/A';
+                              final dept = emp['department']?.toString() ?? 'General';
+                              final role = emp['positionLevel']?.toString() ?? 'Staff';
+                              final email = emp['email']?.toString() ?? '';
+                              final dateLabel = isExit ? 'Exit Date: ${emp['exitDate']}' : 'Join Date: ${emp['joinDate'] != null ? emp['joinDate'].toString().split('T')[0] : 'N/A'}';
+
+                              return Card(
+                                elevation: 1,
+                                color: const Color(0xFFF8FAFC),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 20,
+                                        backgroundColor: accentColor.withValues(alpha: 0.12),
+                                        child: Text(
+                                          empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
+                                          style: TextStyle(color: accentColor, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              empName,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '$role • $dept (ID: $empId)',
+                                              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                                            ),
+                                            if (email.isNotEmpty) ...[
+                                              const SizedBox(height: 2),
+                                              Text(email, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        dateLabel,
+                                        style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hr = Provider.of<HrProvider>(context);
@@ -340,24 +462,51 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          children: [
-                            const Icon(Icons.group_add_rounded, color: Colors.teal, size: 28),
-                            const SizedBox(height: 4),
-                            Text('${trends['joined'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
-                            const Text('Joined This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-                          ],
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _showJoinedExitedBottomSheet(
+                            context,
+                            title: 'Employees Joined This Month',
+                            subtitle: 'Staff members onboarded in current month',
+                            list: List<dynamic>.from(trends['joinedList'] ?? []),
+                            accentColor: Colors.teal,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Column(
+                              children: [
+                                const Icon(Icons.group_add_rounded, color: Colors.teal, size: 28),
+                                const SizedBox(height: 4),
+                                Text('${trends['joined'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                                const Text('Joined This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       Container(width: 1, height: 50, color: const Color(0xFFE2E8F0)),
                       Expanded(
-                        child: Column(
-                          children: [
-                            const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
-                            const SizedBox(height: 4),
-                            Text('${trends['exited'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                            const Text('Exited This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-                          ],
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _showJoinedExitedBottomSheet(
+                            context,
+                            title: 'Employees Exited This Month',
+                            subtitle: 'Staff members offboarded in current month',
+                            list: List<dynamic>.from(trends['exitedList'] ?? []),
+                            accentColor: Colors.redAccent,
+                            isExit: true,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Column(
+                              children: [
+                                const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
+                                const SizedBox(height: 4),
+                                Text('${trends['exited'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                                const Text('Exited This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],

@@ -278,6 +278,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           role: 'Admin',
                         ),
                         _buildShortcutButton(
+                          label: 'HR',
+                          email: 'hr@test.com',
+                          password: 'password123',
+                          role: 'HR',
+                        ),
+                        _buildShortcutButton(
                           label: 'Employee',
                           email: 'emp@test.com',
                           password: 'password123',

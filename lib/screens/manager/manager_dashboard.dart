@@ -114,7 +114,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> with SingleTickerPr
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${req.type} Leave (${req.days} days)',
+                  '${req.type.toString().toLowerCase().endsWith('leave') ? req.type : '${req.type} Leave'} (${req.days} days)',
                   style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 Text(
@@ -192,7 +192,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> with SingleTickerPr
                   style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  'Date: ${reg.date} • Requested status: ${reg.requestedStatus}',
+                  'Date: ${_formatDate(reg.date)} • Requested status: ${reg.requestedStatus}',
                   style: const TextStyle(color: Color(0xFF2563EB), fontSize: 13, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 6),
@@ -403,5 +403,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> with SingleTickerPr
         backgroundColor: success ? Colors.green : Colors.redAccent,
       ),
     );
+  }
+
+  String _formatDate(String? rawDate) {
+    if (rawDate == null || rawDate.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(rawDate);
+      final year = dt.year;
+      final month = dt.month.toString().padLeft(2, '0');
+      final day = dt.day.toString().padLeft(2, '0');
+      return '$year-$month-$day';
+    } catch (_) {
+      if (rawDate.contains('T')) {
+        return rawDate.split('T')[0];
+      }
+      return rawDate;
+    }
   }
 }

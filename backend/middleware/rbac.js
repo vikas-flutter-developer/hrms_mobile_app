@@ -3,6 +3,12 @@ const Role = require('../models/Role');
 const checkPermission = (requiredPermission) => {
     return async (req, res, next) => {
         try {
+            // 🛑 NATIVE ADMINISTRATOR BYPASS
+            // We gracefully allow 'admin', 'superadmin', and legacy 'hr' to bypass all permission checks.
+            if (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'superadmin' || req.user.role.toLowerCase() === 'hr')) {
+                return next();
+            }
+
             let userRole = null;
             if (req.user.roleId) {
                 userRole = await Role.findById(req.user.roleId);
@@ -18,12 +24,6 @@ const checkPermission = (requiredPermission) => {
             }
 
             if (!userRole) {
-                // 🛑 NATIVE ADMINISTRATOR BYPASS
-                // If a Role document is not explicitly defined, we gracefully allow 'admin', 'superadmin', and legacy 'hr' to proceed.
-                // This prevents breaking existing companies that haven't set up custom roles.
-                if (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'superadmin' || req.user.role.toLowerCase() === 'hr')) {
-                    return next();
-                }
                 return res.status(403).json({ message: "Access Denied: No role configuration matching your account role name was found." });
             }
 
