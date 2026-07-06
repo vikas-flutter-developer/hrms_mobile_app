@@ -1055,10 +1055,28 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
                     ),
                     if (hasCert) ...[
                       ElevatedButton.icon(
-                        onPressed: () {
+                        onPressed: () async {
+                          final auth = Provider.of<AuthProvider>(context, listen: false);
+                          final userName = auth.currentUser?.name ?? 'Employee';
+                          final trainer = prog['trainer']?.toString() ?? 'Lead Architect';
+                          
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Downloading Certificate for Employee: $empId...')),
+                            const SnackBar(content: Text('Generating certificate PDF...')),
                           );
+                          
+                          try {
+                            final file = await _generateCertificatePDFFile(userName, title, trainer);
+                            await Share.shareXFiles(
+                              [XFile(file.path)],
+                              text: '🎓 Completion Certificate for $title awarded to $userName.',
+                            );
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error generating certificate: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          }
                         },
                         icon: const Icon(Icons.workspace_premium_rounded, size: 16),
                         label: const Text('Get Certificate'),
