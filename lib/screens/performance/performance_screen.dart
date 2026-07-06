@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../../providers/hr_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/performance_review.dart';
@@ -12,6 +16,108 @@ class PerformanceScreen extends StatefulWidget {
 }
 
 class _PerformanceScreenState extends State<PerformanceScreen> {
+  // ==========================================
+  // 📜 PDF APPRAISAL STATEMENT GENERATOR
+  // ==========================================
+  Future<File> _generateAppraisalPDFFile(PerformanceReviewModel review) async {
+    final document = PdfDocument();
+    final page = document.pages.add();
+    final g = page.graphics;
+
+    final headerFont = PdfStandardFont(PdfFontFamily.helvetica, 18, style: PdfFontStyle.bold);
+    final subHeaderFont = PdfStandardFont(PdfFontFamily.helvetica, 11, style: PdfFontStyle.bold);
+    final sectionFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
+    final boldFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
+    final standardFont = PdfStandardFont(PdfFontFamily.helvetica, 10);
+
+    // 1. Top Banner Box
+    g.drawRectangle(
+      brush: PdfSolidBrush(PdfColor(15, 23, 42)), // Slate 900
+      bounds: const Rect.fromLTWH(0, 0, 500, 55),
+    );
+    g.drawString(
+      'ENTERPRISE HRMS',
+      headerFont,
+      brush: PdfBrushes.white,
+      bounds: const Rect.fromLTWH(15, 12, 350, 25),
+    );
+    g.drawString(
+      'CONFIDENTIAL PERFORMANCE REVIEW & APPRAISAL',
+      subHeaderFont,
+      brush: PdfSolidBrush(PdfColor(148, 163, 184)),
+      bounds: const Rect.fromLTWH(15, 33, 350, 18),
+    );
+
+    double y = 70;
+
+    // 2. Employee Info Card Box
+    g.drawRectangle(
+      pen: PdfPen(PdfColor(226, 232, 240), width: 1),
+      brush: PdfSolidBrush(PdfColor(248, 250, 252)),
+      bounds: Rect.fromLTWH(0, y, 500, 65),
+    );
+    g.drawString('EMPLOYEE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(12, y + 8, 200, 16));
+    g.drawString('Name: ${review.employeeName}', boldFont, bounds: Rect.fromLTWH(12, y + 26, 230, 16));
+    g.drawString('ID: ${review.employeeEmpId}', standardFont, bounds: Rect.fromLTWH(12, y + 42, 230, 16));
+
+    g.drawString('CYCLE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(260, y + 8, 200, 16));
+    g.drawString('Cycle: ${review.cycleName}', boldFont, bounds: Rect.fromLTWH(260, y + 26, 230, 16));
+    g.drawString('Department: ${review.employeeDepartment}', standardFont, bounds: Rect.fromLTWH(260, y + 42, 230, 16));
+
+    y += 80;
+
+    // 3. Evaluation Scores
+    g.drawRectangle(
+      pen: PdfPen(PdfColor(226, 232, 240), width: 1),
+      bounds: Rect.fromLTWH(0, y, 500, 50),
+    );
+    g.drawString('PERFORMANCE RATING', subHeaderFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)), bounds: Rect.fromLTWH(12, y + 10, 200, 16));
+    g.drawString('${review.rating} / 5.0 Stars', headerFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)), bounds: Rect.fromLTWH(12, y + 26, 200, 25));
+
+    g.drawString('STATUS', subHeaderFont, brush: PdfSolidBrush(PdfColor(100, 116, 139)), bounds: Rect.fromLTWH(260, y + 10, 200, 16));
+    g.drawString(review.status.toUpperCase(), headerFont, brush: PdfSolidBrush(PdfColor(16, 185, 129)), bounds: Rect.fromLTWH(260, y + 26, 200, 25));
+
+    y += 65;
+
+    // 4. Overall Comments Section
+    g.drawString('OVERALL PERFORMANCE FEEDBACK & COMMENTS', sectionFont, brush: PdfSolidBrush(PdfColor(15, 23, 42)), bounds: Rect.fromLTWH(0, y, 500, 20));
+    y += 24;
+    g.drawString(review.overallComments, standardFont, bounds: Rect.fromLTWH(0, y, 500, 120));
+
+    y += 140;
+
+    // 5. Signatures
+    g.drawLine(
+      PdfPen(PdfColor(148, 163, 184), width: 1),
+      Offset(0, y),
+      Offset(150, y),
+    );
+    g.drawString(
+      'Evaluated By: ${review.reviewerName}',
+      standardFont,
+      bounds: Rect.fromLTWH(0, y + 6, 200, 20),
+    );
+
+    g.drawLine(
+      PdfPen(PdfColor(148, 163, 184), width: 1),
+      Offset(350, y),
+      Offset(500, y),
+    );
+    g.drawString(
+      'Signature / Date',
+      standardFont,
+      bounds: Rect.fromLTWH(350, y + 6, 150, 20),
+    );
+
+    final bytes = await document.save();
+    document.dispose();
+
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/Appraisal_${review.employeeName.replaceAll(' ', '_')}.pdf');
+    await file.writeAsBytes(bytes);
+    return file;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -403,7 +509,28 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                                     'Evaluated by: ${review.reviewerName}',
                                     style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold),
                                   ),
-                                  const Icon(Icons.arrow_forward_rounded, size: 12, color: Color(0xFF94A3B8)),
+                                  IconButton(
+                                    icon: const Icon(Icons.download_rounded, size: 18, color: Color(0xFF0284C7)),
+                                    tooltip: 'Download PDF Appraisal',
+                                    onPressed: () async {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Generating appraisal PDF...')),
+                                      );
+                                      try {
+                                        final file = await _generateAppraisalPDFFile(review);
+                                        await Share.shareXFiles(
+                                          [XFile(file.path)],
+                                          text: '📊 Performance Appraisal Statement for ${review.employeeName} (${review.cycleName}).',
+                                        );
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error generating appraisal PDF: $e'), backgroundColor: Colors.redAccent),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
                                 ],
                               ),
                             ],
