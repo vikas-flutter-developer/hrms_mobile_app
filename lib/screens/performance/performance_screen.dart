@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,6 +8,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../../providers/hr_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/performance_review.dart';
+import '../../utils/pdf_downloader.dart';
 
 class PerformanceScreen extends StatefulWidget {
   const PerformanceScreen({super.key});
@@ -19,7 +21,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   // ==========================================
   // 📜 PDF APPRAISAL STATEMENT GENERATOR
   // ==========================================
-  Future<File> _generateAppraisalPDFFile(PerformanceReviewModel review) async {
+  // Returns raw bytes — works on both web and mobile.
+  Future<List<int>> _generateAppraisalBytes(PerformanceReviewModel review) async {
     final document = PdfDocument();
     final page = document.pages.add();
     final g = page.graphics;
@@ -32,90 +35,247 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
     // 1. Top Banner Box
     g.drawRectangle(
-      brush: PdfSolidBrush(PdfColor(15, 23, 42)), // Slate 900
+      brush: PdfSolidBrush(PdfColor(15, 23, 42)),
       bounds: const Rect.fromLTWH(0, 0, 500, 55),
     );
-    g.drawString(
-      'ENTERPRISE HRMS',
-      headerFont,
-      brush: PdfBrushes.white,
-      bounds: const Rect.fromLTWH(15, 12, 350, 25),
-    );
-    g.drawString(
-      'CONFIDENTIAL PERFORMANCE REVIEW & APPRAISAL',
-      subHeaderFont,
-      brush: PdfSolidBrush(PdfColor(148, 163, 184)),
-      bounds: const Rect.fromLTWH(15, 33, 350, 18),
-    );
+    g.drawString('ENTERPRISE HRMS', headerFont, brush: PdfBrushes.white,
+        bounds: const Rect.fromLTWH(15, 12, 350, 25));
+    g.drawString('CONFIDENTIAL PERFORMANCE REVIEW & APPRAISAL', subHeaderFont,
+        brush: PdfSolidBrush(PdfColor(148, 163, 184)),
+        bounds: const Rect.fromLTWH(15, 33, 350, 18));
 
     double y = 70;
 
-    // 2. Employee Info Card Box
+    // 2. Employee Info Box
     g.drawRectangle(
       pen: PdfPen(PdfColor(226, 232, 240), width: 1),
       brush: PdfSolidBrush(PdfColor(248, 250, 252)),
       bounds: Rect.fromLTWH(0, y, 500, 65),
     );
-    g.drawString('EMPLOYEE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(12, y + 8, 200, 16));
+    g.drawString('EMPLOYEE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)),
+        bounds: Rect.fromLTWH(12, y + 8, 200, 16));
     g.drawString('Name: ${review.employeeName}', boldFont, bounds: Rect.fromLTWH(12, y + 26, 230, 16));
     g.drawString('ID: ${review.employeeEmpId}', standardFont, bounds: Rect.fromLTWH(12, y + 42, 230, 16));
-
-    g.drawString('CYCLE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)), bounds: Rect.fromLTWH(260, y + 8, 200, 16));
+    g.drawString('CYCLE DETAILS', subHeaderFont, brush: PdfSolidBrush(PdfColor(37, 99, 235)),
+        bounds: Rect.fromLTWH(260, y + 8, 200, 16));
     g.drawString('Cycle: ${review.cycleName}', boldFont, bounds: Rect.fromLTWH(260, y + 26, 230, 16));
     g.drawString('Department: ${review.employeeDepartment}', standardFont, bounds: Rect.fromLTWH(260, y + 42, 230, 16));
-
     y += 80;
 
-    // 3. Evaluation Scores
+    // 3. Rating & Status Box
     g.drawRectangle(
       pen: PdfPen(PdfColor(226, 232, 240), width: 1),
       bounds: Rect.fromLTWH(0, y, 500, 50),
     );
-    g.drawString('PERFORMANCE RATING', subHeaderFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)), bounds: Rect.fromLTWH(12, y + 10, 200, 16));
-    g.drawString('${review.rating} / 5.0 Stars', headerFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)), bounds: Rect.fromLTWH(12, y + 26, 200, 25));
-
-    g.drawString('STATUS', subHeaderFont, brush: PdfSolidBrush(PdfColor(100, 116, 139)), bounds: Rect.fromLTWH(260, y + 10, 200, 16));
-    g.drawString(review.status.toUpperCase(), headerFont, brush: PdfSolidBrush(PdfColor(16, 185, 129)), bounds: Rect.fromLTWH(260, y + 26, 200, 25));
-
+    g.drawString('PERFORMANCE RATING', subHeaderFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)),
+        bounds: Rect.fromLTWH(12, y + 10, 200, 16));
+    g.drawString('${review.rating} / 5.0 Stars', headerFont, brush: PdfSolidBrush(PdfColor(217, 119, 6)),
+        bounds: Rect.fromLTWH(12, y + 26, 200, 25));
+    g.drawString('STATUS', subHeaderFont, brush: PdfSolidBrush(PdfColor(100, 116, 139)),
+        bounds: Rect.fromLTWH(260, y + 10, 200, 16));
+    g.drawString(review.status.toUpperCase(), headerFont, brush: PdfSolidBrush(PdfColor(16, 185, 129)),
+        bounds: Rect.fromLTWH(260, y + 26, 200, 25));
     y += 65;
 
-    // 4. Overall Comments Section
-    g.drawString('OVERALL PERFORMANCE FEEDBACK & COMMENTS', sectionFont, brush: PdfSolidBrush(PdfColor(15, 23, 42)), bounds: Rect.fromLTWH(0, y, 500, 20));
+    // 4. Comments
+    g.drawString('OVERALL PERFORMANCE FEEDBACK & COMMENTS', sectionFont,
+        brush: PdfSolidBrush(PdfColor(15, 23, 42)), bounds: Rect.fromLTWH(0, y, 500, 20));
     y += 24;
     g.drawString(review.overallComments, standardFont, bounds: Rect.fromLTWH(0, y, 500, 120));
-
     y += 140;
 
     // 5. Signatures
-    g.drawLine(
-      PdfPen(PdfColor(148, 163, 184), width: 1),
-      Offset(0, y),
-      Offset(150, y),
-    );
-    g.drawString(
-      'Evaluated By: ${review.reviewerName}',
-      standardFont,
-      bounds: Rect.fromLTWH(0, y + 6, 200, 20),
-    );
-
-    g.drawLine(
-      PdfPen(PdfColor(148, 163, 184), width: 1),
-      Offset(350, y),
-      Offset(500, y),
-    );
-    g.drawString(
-      'Signature / Date',
-      standardFont,
-      bounds: Rect.fromLTWH(350, y + 6, 150, 20),
-    );
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(0, y), Offset(150, y));
+    g.drawString('Evaluated By: ${review.reviewerName}', standardFont,
+        bounds: Rect.fromLTWH(0, y + 6, 200, 20));
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(350, y), Offset(500, y));
+    g.drawString('Signature / Date', standardFont, bounds: Rect.fromLTWH(350, y + 6, 150, 20));
 
     final bytes = await document.save();
     document.dispose();
+    return bytes;
+  }
 
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/Appraisal_${review.employeeName.replaceAll(' ', '_')}.pdf');
-    await file.writeAsBytes(bytes);
-    return file;
+  // ==========================================
+  // 👁️ APPRAISAL PREVIEW + DOWNLOAD DIALOG
+  // ==========================================
+  void _showAppraisalPreview(BuildContext context, PerformanceReviewModel review) {
+    Color statusColor;
+    switch (review.status) {
+      case 'Finalized': statusColor = const Color(0xFF10B981); break;
+      case 'Reviewed': statusColor = const Color(0xFF0284C7); break;
+      case 'Submitted': statusColor = const Color(0xFF8B5CF6); break;
+      default: statusColor = const Color(0xFF64748B);
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isDownloading = false;
+        return StatefulBuilder(builder: (ctx, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            contentPadding: const EdgeInsets.all(0),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Dialog Header
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.analytics_rounded, color: Color(0xFF38BDF8), size: 22),
+                        SizedBox(width: 10),
+                        Text('Appraisal Preview', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                  // Appraisal Card Mockup
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Name + Status Row
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(color: Color(0xFFFEF3C7), shape: BoxShape.circle),
+                                child: const Icon(Icons.star_rounded, color: Color(0xFFD97706), size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(review.employeeName,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                                    Text('${review.employeeEmpId} • ${review.employeeDepartment}',
+                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(review.status,
+                                    style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(review.cycleName,
+                              style: const TextStyle(color: Color(0xFF0284C7), fontSize: 11, fontWeight: FontWeight.w600)),
+                          const Divider(height: 20, color: Color(0xFFE2E8F0)),
+                          // Star Rating
+                          Row(
+                            children: [
+                              ...List.generate(5, (i) => Icon(
+                                i < review.rating ? Icons.star_rounded : Icons.star_border_rounded,
+                                size: 18, color: const Color(0xFFF59E0B),
+                              )),
+                              const SizedBox(width: 8),
+                              Text('${review.rating}/5', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFF59E0B))),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          // Comments
+                          Text(review.overallComments,
+                              style: const TextStyle(color: Color(0xFF334155), fontSize: 13, height: 1.4)),
+                          const SizedBox(height: 10),
+                          Text('Evaluated by: ${review.reviewerName}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Action Buttons
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text('Close'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: isDownloading
+                                ? null
+                                : () async {
+                                    setDlgState(() => isDownloading = true);
+                                    try {
+                                      final bytes = await _generateAppraisalBytes(review);
+                                      final filename = 'Appraisal_${review.employeeName.replaceAll(' ', '_')}.pdf';
+                                      if (kIsWeb) {
+                                        downloadPdfBytes(bytes, filename);
+                                      } else {
+                                        final tempDir = await getTemporaryDirectory();
+                                        final file = File('${tempDir.path}/$filename');
+                                        await file.writeAsBytes(bytes);
+                                        await Share.shareXFiles([XFile(file.path)],
+                                            text: '📊 Performance Appraisal for ${review.employeeName}');
+                                      }
+                                      if (ctx.mounted) Navigator.pop(ctx);
+                                    } catch (e) {
+                                      setDlgState(() => isDownloading = false);
+                                      if (ctx.mounted) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                                        );
+                                      }
+                                    }
+                                  },
+                            icon: isDownloading
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.download_rounded, size: 18),
+                            label: Text(isDownloading ? 'Downloading...' : 'Download PDF'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0284C7),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
   }
 
   @override
@@ -511,25 +671,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.download_rounded, size: 18, color: Color(0xFF0284C7)),
-                                    tooltip: 'Download PDF Appraisal',
-                                    onPressed: () async {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Generating appraisal PDF...')),
-                                      );
-                                      try {
-                                        final file = await _generateAppraisalPDFFile(review);
-                                        await Share.shareXFiles(
-                                          [XFile(file.path)],
-                                          text: '📊 Performance Appraisal Statement for ${review.employeeName} (${review.cycleName}).',
-                                        );
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Error generating appraisal PDF: $e'), backgroundColor: Colors.redAccent),
-                                          );
-                                        }
-                                      }
-                                    },
+                                    tooltip: 'Preview & Download Appraisal PDF',
+                                    onPressed: () => _showAppraisalPreview(context, review),
                                   ),
                                 ],
                               ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/hr_provider.dart';
 import '../../models/app_user.dart';
+import '../../utils/pdf_downloader.dart';
 
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
@@ -33,7 +35,8 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
   // ==========================================
   // 📜 PDF CERTIFICATE GENERATOR
   // ==========================================
-  Future<File> _generateCertificatePDFFile(String traineeName, String courseTitle, String trainer) async {
+  // Returns raw PDF bytes — works on both web and mobile.
+  Future<List<int>> _generateCertificateBytes(String traineeName, String courseTitle, String trainer) async {
     final document = PdfDocument();
     document.pageSettings.orientation = PdfPageOrientation.landscape;
     final page = document.pages.add();
@@ -43,7 +46,7 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
     final double height = page.getClientSize().height;
 
     // Golden frame borders
-    final borderPen = PdfPen(PdfColor(218, 165, 32), width: 4); // Golden
+    final borderPen = PdfPen(PdfColor(218, 165, 32), width: 4);
     final innerPen = PdfPen(PdfColor(218, 165, 32), width: 1);
     g.drawRectangle(pen: borderPen, bounds: Rect.fromLTWH(10, 10, width - 20, height - 20));
     g.drawRectangle(pen: innerPen, bounds: Rect.fromLTWH(16, 16, width - 32, height - 32));
@@ -54,79 +57,221 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
     final courseFont = PdfStandardFont(PdfFontFamily.helvetica, 16, style: PdfFontStyle.bold);
     final footerFont = PdfStandardFont(PdfFontFamily.helvetica, 10);
 
-    g.drawString(
-      'CERTIFICATE OF COMPLETION',
-      titleFont,
-      brush: PdfSolidBrush(PdfColor(15, 23, 42)),
-      bounds: Rect.fromLTWH(0, 50, width, 40),
-      format: PdfStringFormat(alignment: PdfTextAlignment.center),
-    );
+    g.drawString('CERTIFICATE OF COMPLETION', titleFont,
+        brush: PdfSolidBrush(PdfColor(15, 23, 42)),
+        bounds: Rect.fromLTWH(0, 50, width, 40),
+        format: PdfStringFormat(alignment: PdfTextAlignment.center));
+    g.drawString('This is proudly presented to', textFont,
+        brush: PdfSolidBrush(PdfColor(100, 116, 139)),
+        bounds: Rect.fromLTWH(0, 100, width, 24),
+        format: PdfStringFormat(alignment: PdfTextAlignment.center));
+    g.drawString(traineeName, nameFont,
+        brush: PdfSolidBrush(PdfColor(2, 132, 199)),
+        bounds: Rect.fromLTWH(0, 130, width, 40),
+        format: PdfStringFormat(alignment: PdfTextAlignment.center));
+    g.drawString('for successfully completing the course', textFont,
+        brush: PdfSolidBrush(PdfColor(100, 116, 139)),
+        bounds: Rect.fromLTWH(0, 180, width, 24),
+        format: PdfStringFormat(alignment: PdfTextAlignment.center));
+    g.drawString(courseTitle, courseFont,
+        brush: PdfSolidBrush(PdfColor(15, 23, 42)),
+        bounds: Rect.fromLTWH(0, 210, width, 30),
+        format: PdfStringFormat(alignment: PdfTextAlignment.center));
 
-    g.drawString(
-      'This is proudly presented to',
-      textFont,
-      brush: PdfSolidBrush(PdfColor(100, 116, 139)),
-      bounds: Rect.fromLTWH(0, 100, width, 24),
-      format: PdfStringFormat(alignment: PdfTextAlignment.center),
-    );
-
-    g.drawString(
-      traineeName,
-      nameFont,
-      brush: PdfSolidBrush(PdfColor(2, 132, 199)),
-      bounds: Rect.fromLTWH(0, 130, width, 40),
-      format: PdfStringFormat(alignment: PdfTextAlignment.center),
-    );
-
-    g.drawString(
-      'for successfully completing the course',
-      textFont,
-      brush: PdfSolidBrush(PdfColor(100, 116, 139)),
-      bounds: Rect.fromLTWH(0, 180, width, 24),
-      format: PdfStringFormat(alignment: PdfTextAlignment.center),
-    );
-
-    g.drawString(
-      courseTitle,
-      courseFont,
-      brush: PdfSolidBrush(PdfColor(15, 23, 42)),
-      bounds: Rect.fromLTWH(0, 210, width, 30),
-      format: PdfStringFormat(alignment: PdfTextAlignment.center),
-    );
-
-    // Signature lines
-    g.drawLine(
-      PdfPen(PdfColor(148, 163, 184), width: 1),
-      Offset(50, height - 70),
-      Offset(200, height - 70),
-    );
-    g.drawString(
-      'Date: ${DateTime.now().toString().split(' ')[0]}',
-      footerFont,
-      brush: PdfSolidBrush(PdfColor(15, 23, 42)),
-      bounds: Rect.fromLTWH(50, height - 60, 150, 20),
-    );
-
-    g.drawLine(
-      PdfPen(PdfColor(148, 163, 184), width: 1),
-      Offset(width - 200, height - 70),
-      Offset(width - 50, height - 70),
-    );
-    g.drawString(
-      'Instructor: $trainer',
-      footerFont,
-      brush: PdfSolidBrush(PdfColor(15, 23, 42)),
-      bounds: Rect.fromLTWH(width - 200, height - 60, 150, 20),
-    );
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(50, height - 70), Offset(200, height - 70));
+    g.drawString('Date: ${DateTime.now().toString().split(' ')[0]}', footerFont,
+        brush: PdfSolidBrush(PdfColor(15, 23, 42)),
+        bounds: Rect.fromLTWH(50, height - 60, 150, 20));
+    g.drawLine(PdfPen(PdfColor(148, 163, 184), width: 1), Offset(width - 200, height - 70), Offset(width - 50, height - 70));
+    g.drawString('Instructor: $trainer', footerFont,
+        brush: PdfSolidBrush(PdfColor(15, 23, 42)),
+        bounds: Rect.fromLTWH(width - 200, height - 60, 150, 20));
 
     final bytes = await document.save();
     document.dispose();
+    return bytes;
+  }
 
-    final tempDir = await getTemporaryDirectory();
-    final sanitizedName = traineeName.replaceAll(RegExp(r'\s+'), '_');
-    final file = File('${tempDir.path}/Certificate_${sanitizedName}.pdf');
-    await file.writeAsBytes(bytes);
-    return file;
+  // ==========================================
+  // 👁️ EMPLOYEE CERTIFICATE PREVIEW + DOWNLOAD
+  // ==========================================
+  void _showEmployeeCertPreview(
+    BuildContext context,
+    String traineeName,
+    String courseTitle,
+    String trainer,
+  ) {
+    final dateStr = DateTime.now().toString().split(' ')[0];
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isDownloading = false;
+        return StatefulBuilder(builder: (ctx, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            contentPadding: const EdgeInsets.all(0),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.workspace_premium_rounded, color: Color(0xFFD4AF37), size: 22),
+                        SizedBox(width: 10),
+                        Text('Certificate Preview', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                  // Certificate mockup
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFD4AF37), Color(0xFFF5E27A), Color(0xFFD4AF37)],
+                          stops: [0.0, 0.5, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFDF0),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.workspace_premium_rounded, color: Color(0xFFD4AF37), size: 44),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'CERTIFICATE OF COMPLETION',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A), letterSpacing: 1.2),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('This is proudly presented to',
+                                style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Color(0xFF64748B))),
+                            const SizedBox(height: 6),
+                            Text(
+                              traineeName.toUpperCase(),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0284C7)),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('for successfully completing',
+                                style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Color(0xFF64748B))),
+                            const SizedBox(height: 4),
+                            Text(
+                              courseTitle,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(height: 1, width: 100, color: const Color(0xFFD4AF37)),
+                                    const SizedBox(height: 4),
+                                    Text('Date: $dateStr', style: const TextStyle(fontSize: 8, color: Color(0xFF64748B))),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(height: 1, width: 100, color: const Color(0xFFD4AF37)),
+                                    const SizedBox(height: 4),
+                                    Text('Instructor: $trainer', style: const TextStyle(fontSize: 8, color: Color(0xFF64748B))),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Action buttons
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text('Close'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: isDownloading
+                                ? null
+                                : () async {
+                                    setDlgState(() => isDownloading = true);
+                                    try {
+                                      final bytes = await _generateCertificateBytes(traineeName, courseTitle, trainer);
+                                      final filename = 'Certificate_${traineeName.replaceAll(' ', '_')}.pdf';
+                                      if (kIsWeb) {
+                                        downloadPdfBytes(bytes, filename);
+                                      } else {
+                                        final tempDir = await getTemporaryDirectory();
+                                        final file = File('${tempDir.path}/$filename');
+                                        await file.writeAsBytes(bytes);
+                                        await Share.shareXFiles([XFile(file.path)],
+                                            text: '🎓 Certificate of Completion for $courseTitle');
+                                      }
+                                      if (ctx.mounted) Navigator.pop(ctx);
+                                    } catch (e) {
+                                      setDlgState(() => isDownloading = false);
+                                      if (ctx.mounted) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                                        );
+                                      }
+                                    }
+                                  },
+                            icon: isDownloading
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.download_rounded, size: 18),
+                            label: Text(isDownloading ? 'Downloading...' : 'Download PDF'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0284C7),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
   }
 
   // ==========================================
@@ -245,24 +390,39 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
               onPressed: () async {
                 // 1. Issue certificate record on backend DB
                 await hr.issueCertificate(programId: prog['_id']?.toString() ?? '', employeeId: empId);
-                
-                // 2. Generate PDF and share
-                final file = await _generateCertificatePDFFile(empName, courseTitle, trainer);
-                final messageText = 
-                    "🎓 *CONGRATULATIONS!*\n\n"
-                    "Hello *$empName*,\n"
-                    "We are proud to award you this Certificate of Completion for successfully finishing *${courseTitle}*.\n\n"
-                    "Keep up the exceptional work! 🚀";
 
-                if (empPhone.isNotEmpty) {
-                  final cleanPhone = empPhone.replaceAll(RegExp(r'[^\d+]'), '');
-                  final whatsappUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(messageText)}");
-                  if (await canLaunchUrl(whatsappUrl)) {
-                    await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+                // 2. Generate PDF bytes (web-safe)
+                final bytes = await _generateCertificateBytes(empName, courseTitle, trainer);
+                final filename = 'Certificate_${empName.replaceAll(' ', '_')}.pdf';
+                final messageText =
+                    "\ud83c\udf93 *CONGRATULATIONS!*\n\n"
+                    "Hello *$empName*,\n"
+                    "We are proud to award you this Certificate of Completion for successfully finishing *$courseTitle*.\n\n"
+                    "Keep up the exceptional work! \ud83d\ude80";
+
+                if (kIsWeb) {
+                  // On web: download PDF + open WhatsApp
+                  downloadPdfBytes(bytes, filename);
+                  if (empPhone.isNotEmpty) {
+                    final cleanPhone = empPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                    final whatsappUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(messageText)}");
+                    if (await canLaunchUrl(whatsappUrl)) {
+                      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+                    }
                   }
+                } else {
+                  final tempDir = await getTemporaryDirectory();
+                  final file = File('${tempDir.path}/$filename');
+                  await file.writeAsBytes(bytes);
+                  if (empPhone.isNotEmpty) {
+                    final cleanPhone = empPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                    final whatsappUrl = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(messageText)}");
+                    if (await canLaunchUrl(whatsappUrl)) {
+                      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                  await Share.shareXFiles([XFile(file.path)], text: messageText);
                 }
-                
-                await Share.shareXFiles([XFile(file.path)], text: messageText);
                 if (context.mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.share_rounded, size: 16),
@@ -279,25 +439,35 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
               onPressed: () async {
                 // 1. Issue certificate record on backend DB
                 await hr.issueCertificate(programId: prog['_id']?.toString() ?? '', employeeId: empId);
-                
-                // 2. Generate PDF and share
-                final file = await _generateCertificatePDFFile(empName, courseTitle, trainer);
+
+                // 2. Generate PDF bytes (web-safe)
+                final bytes = await _generateCertificateBytes(empName, courseTitle, trainer);
+                final filename = 'Certificate_${empName.replaceAll(' ', '_')}.pdf';
                 final subject = "Official Certification: $courseTitle";
                 final body = "Dear $empName,\n\nCongratulations! Please find your official Completion Certificate for '$courseTitle' attached.\n\nWarm regards,\nHR Department";
 
-                final Uri emailUri = Uri(
-                  scheme: 'mailto',
-                  path: empEmail,
-                  queryParameters: {
-                    'subject': subject,
-                    'body': body,
-                  },
-                );
-
-                if (await canLaunchUrl(emailUri)) {
-                  await launchUrl(emailUri);
+                if (kIsWeb) {
+                  downloadPdfBytes(bytes, filename);
+                  final Uri emailUri = Uri(
+                    scheme: 'mailto',
+                    path: empEmail,
+                    queryParameters: {'subject': subject, 'body': body},
+                  );
+                  if (await canLaunchUrl(emailUri)) await launchUrl(emailUri);
                 } else {
-                  await Share.shareXFiles([XFile(file.path)], text: body);
+                  final tempDir = await getTemporaryDirectory();
+                  final file = File('${tempDir.path}/$filename');
+                  await file.writeAsBytes(bytes);
+                  final Uri emailUri = Uri(
+                    scheme: 'mailto',
+                    path: empEmail,
+                    queryParameters: {'subject': subject, 'body': body},
+                  );
+                  if (await canLaunchUrl(emailUri)) {
+                    await launchUrl(emailUri);
+                  } else {
+                    await Share.shareXFiles([XFile(file.path)], text: body);
+                  }
                 }
 
                 if (context.mounted) Navigator.pop(context);
@@ -1055,28 +1225,11 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
                     ),
                     if (hasCert) ...[
                       ElevatedButton.icon(
-                        onPressed: () async {
+                        onPressed: () {
                           final auth = Provider.of<AuthProvider>(context, listen: false);
                           final userName = auth.currentUser?.name ?? 'Employee';
                           final trainer = prog['trainer']?.toString() ?? 'Lead Architect';
-                          
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Generating certificate PDF...')),
-                          );
-                          
-                          try {
-                            final file = await _generateCertificatePDFFile(userName, title, trainer);
-                            await Share.shareXFiles(
-                              [XFile(file.path)],
-                              text: '🎓 Completion Certificate for $title awarded to $userName.',
-                            );
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error generating certificate: $e'), backgroundColor: Colors.redAccent),
-                              );
-                            }
-                          }
+                          _showEmployeeCertPreview(context, userName, title, trainer);
                         },
                         icon: const Icon(Icons.workspace_premium_rounded, size: 16),
                         label: const Text('Get Certificate'),
