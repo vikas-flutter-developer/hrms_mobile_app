@@ -218,6 +218,31 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> updateProfile({required String name, required String email}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _apiService.put('/employees/profile', data: {
+        'name': name,
+        'email': email,
+      });
+      _isLoading = false;
+      if (response.statusCode == 200) {
+        await loadProfile();
+        notifyListeners();
+        return true;
+      }
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = _parseError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> updateProfilePhoto(String base64Image) async {
     _isLoading = true;
     _errorMessage = null;

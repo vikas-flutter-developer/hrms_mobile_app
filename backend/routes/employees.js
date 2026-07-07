@@ -476,7 +476,23 @@ router.put('/profile', verifyToken, async (req, res) => {
       }
     }
 
-    if (userRole === 'admin') {
+    if (userRole === 'superadmin') {
+      const { name, email } = req.body;
+      if (name) updatePayload.name = name.trim();
+      if (email) {
+        const existingSuper = await Superadmin.findOne({ email: email.trim().toLowerCase(), _id: { $ne: req.user.id } });
+        if (existingSuper) {
+          return res.status(400).json({ message: "An administrator account with this email already exists." });
+        }
+        updatePayload.email = email.trim().toLowerCase();
+      }
+      updatedUser = await Superadmin.findByIdAndUpdate(req.user.id, {
+        $set: updatePayload
+      }, {
+        returnDocument: 'after',
+        runValidators: true
+      }).select('-password');
+    } else if (userRole === 'admin') {
       updatedUser = await Admin.findByIdAndUpdate(req.user.id, {
         $set: updatePayload
       }, {
