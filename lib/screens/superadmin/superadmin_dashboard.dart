@@ -604,18 +604,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.manage_accounts_rounded, color: Color(0xFF4F46E5)),
-                tooltip: 'Edit Profile',
-                onPressed: () => _showEditProfileDialog(context, user),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.vpn_key_rounded, color: Color(0xFF4F46E5)),
-                tooltip: 'Change Password',
-                onPressed: () => _showChangePasswordDialog(context),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
                 icon: const Icon(Icons.refresh_rounded, color: Color(0xFF4F46E5)),
                 tooltip: 'Refresh Current View',
                 onPressed: () {
@@ -641,22 +629,62 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 ],
               ),
               const SizedBox(width: 16),
-              CircleAvatar(
-                backgroundColor: const Color(0xFFE0E7FF),
-                child: Text(
-                  user.name.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(color: Color(0xFF4F46E5), fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
-                onPressed: () async {
-                  await auth.logout();
-                  if (mounted) {
-                    Navigator.pushReplacementNamed(context, '/login');
+              PopupMenuButton<String>(
+                offset: const Offset(0, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                onSelected: (val) {
+                  if (val == 'edit') {
+                    _showEditProfileDialog(context, user);
+                  } else if (val == 'password') {
+                    _showChangePasswordDialog(context);
+                  } else if (val == 'logout') {
+                    auth.logout().then((_) {
+                      if (mounted) {
+                        Navigator.pushReplacementNamed(context, '/login');
+                      }
+                    });
                   }
                 },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.manage_accounts_rounded, color: Color(0xFF4F46E5), size: 20),
+                        SizedBox(width: 8),
+                        Text('Edit Profile'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'password',
+                    child: Row(
+                      children: [
+                        Icon(Icons.vpn_key_rounded, color: Color(0xFF4F46E5), size: 20),
+                        SizedBox(width: 8),
+                        Text('Change Password'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 8),
+                        Text('Logout', style: TextStyle(color: Colors.redAccent)),
+                      ],
+                    ),
+                  ),
+                ],
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFFE0E7FF),
+                  child: Text(
+                    user.name.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(color: Color(0xFF4F46E5), fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
             ],
           )
