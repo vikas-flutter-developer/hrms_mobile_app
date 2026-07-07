@@ -494,6 +494,22 @@ class _LoginScreenState extends State<LoginScreen>
               _buildShortcutButton('Super Admin', 'ceo@company.com', 'supersecretpassword', 'SuperAdmin', const Color(0xFFDC2626)),
             ],
           ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('New corporate tenant? ', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/register_admin');
+                },
+                child: const Text(
+                  'Register Company Admin',
+                  style: TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

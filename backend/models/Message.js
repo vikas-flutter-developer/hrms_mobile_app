@@ -5,6 +5,8 @@ const MessageSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'senderModel' },
     senderModel: { type: String, enum: ['Employee', 'Admin'], required: true },
     content: { type: String, required: true },
+    attachmentUrl: { type: String, default: null },
+    attachmentType: { type: String, default: null },
     isGlobal: { type: Boolean, default: false }
 }, { timestamps: true });
 

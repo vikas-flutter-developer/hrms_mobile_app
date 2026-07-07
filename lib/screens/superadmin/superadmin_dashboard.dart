@@ -6,10 +6,14 @@ import 'package:intl/intl.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
+import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as xl;
+import 'package:syncfusion_flutter_pdf/pdf.dart' as pdf;
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../models/app_user.dart';
 import '../../config/constants.dart';
+import '../../utils/file_downloader.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -46,7 +50,115 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   final _ipReasonController = TextEditingController();
   String _ipRuleType = 'Blacklist';
 
-  // DB & Storage State removed
+  // ==========================================
+  // NEW ENHANCEMENTS STATE VARIABLES
+  // ==========================================
+
+  // User Management Tab State
+  List<dynamic> _users = [];
+  List<dynamic> _filteredUsers = [];
+  String _userSearchQuery = '';
+  String _selectedUserCompanyFilter = 'All';
+  String _selectedUserRoleFilter = 'All';
+  String _selectedUserStatusFilter = 'All';
+  final Set<String> _selectedUserIds = {};
+  final _resetPasswordController = TextEditingController();
+
+  // Settings Tab State
+  int _activeSettingsSubTabIndex = 0; // 0: System Config, 1: Our Team
+  Map<String, dynamic> _systemSettings = {};
+  final _settingsFormKey = GlobalKey<FormState>();
+  final _smtpHostController = TextEditingController();
+  final _smtpPortController = TextEditingController();
+  final _smtpUserController = TextEditingController();
+  final _smtpPassController = TextEditingController();
+  final _settingsMaintenanceMsgController = TextEditingController();
+  double _sessionTimeoutMinutes = 30.0;
+  String _selectedLanguage = 'English';
+  String _selectedTimezone = 'UTC';
+  String _selectedDateFormat = 'YYYY-MM-DD';
+  String _selectedCurrency = 'INR';
+  String _selectedPasswordComplexity = 'Strong';
+  String _selectedEnforce2FA = 'Admin Only';
+  bool _maintenanceMode = false;
+  String _maintenanceType = 'Full';
+  Map<String, bool> _settingsModules = {
+    'attendance': true,
+    'leave': true,
+    'payroll': true,
+    'performance': true,
+    'recruitment': true,
+    'training': true,
+    'asset': true,
+    'expense': true,
+    'document': true,
+    'chat': true,
+    'announcements': true,
+    'reports': true,
+    'shift': true,
+    'overtime': true,
+  };
+
+  // Master Data Tab State
+  String _activeMasterDataCategory = 'Department';
+  List<dynamic> _masterDataItems = [];
+  final _masterDataFormKey = GlobalKey<FormState>();
+  final _masterDataNameController = TextEditingController();
+  final _masterDataDescController = TextEditingController();
+  final _masterDataCodeController = TextEditingController();
+  final _masterDataCapacityController = TextEditingController();
+  final _masterDataQuotaController = TextEditingController();
+  final _masterDataGratuityController = TextEditingController();
+  final _masterDataGradeController = TextEditingController();
+  final _masterDataLevelController = TextEditingController();
+  DateTime? _masterDataHolidayDate;
+
+  // RBAC Tab State
+  int _activeRbacSubTabIndex = 0; // 0: Roles, 1: Audit Logs
+  List<dynamic> _rbacRoles = [];
+  List<dynamic> _rbacAuditLogs = [];
+  final _roleFormKey = GlobalKey<FormState>();
+  final _roleNameController = TextEditingController();
+  final _roleDescController = TextEditingController();
+  String _roleScope = 'Global';
+  String? _roleCompanyId;
+  String _roleSubRoleCategory = 'Standard';
+  Map<String, bool> _rolePermissions = {}; // dynamically constructed permissions map
+
+  // Reports Tab State
+  String _selectedReportType = 'growth';
+  DateTimeRange? _reportDateRange;
+  List<dynamic> _reportData = [];
+  List<dynamic> _scheduledReports = [];
+  final _scheduleFormKey = GlobalKey<FormState>();
+  final _scheduleRecipientsController = TextEditingController();
+  String _scheduleFrequency = 'daily';
+  String _scheduleFormat = 'CSV';
+
+  // Coupons (Inside existing Plans tab)
+  int _activePlansSubTabIndex = 0; // 0: Plans, 1: Coupons
+  int _activeCompaniesSubTabIndex = 0;
+  List<dynamic> _coupons = [];
+  final _couponFormKey = GlobalKey<FormState>();
+  final _couponCodeController = TextEditingController();
+  final _couponValueController = TextEditingController();
+  final _couponMaxUsesController = TextEditingController();
+  String _couponDiscountType = 'Percentage';
+  DateTime? _couponExpiryDate;
+
+  // Announcements Schedule State
+  bool _announceScheduleLater = false;
+  DateTime? _announceScheduledAt;
+  List<String> _userCompanies = ['All'];
+
+  // Team Management State
+  List<dynamic> _teamMembers = [];
+  final _teamFormKey = GlobalKey<FormState>();
+  final _teamNameController = TextEditingController();
+  final _teamEmailController = TextEditingController();
+  final _teamPassController = TextEditingController();
+  String _teamSubRole = 'Support';
+  bool _team2FA = false;
 
   @override
   void initState() {
@@ -124,9 +236,19 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     });
     if (index == 0) _fetchAnalytics();
     if (index == 1) _fetchCompanies();
-    if (index == 2) _fetchPlans();
+    if (index == 2) {
+      _fetchPlans();
+      _fetchCoupons();
+    }
+    if (index == 3) _fetchAnnouncements();
     if (index == 4) _fetchTickets();
     if (index == 5) _fetchSecurityData();
+    if (index == 6) _fetchUsersData();
+    if (index == 7) {
+      _fetchSettingsData();
+      _fetchTeamMembers();
+    }
+    if (index == 8) _fetchReportsData();
   }
 
   Future<void> _fetchAnalytics() async {
@@ -211,6 +333,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               _buildAnnouncementsView(),
                               _buildTicketsView(),
                               _buildSecurityView(),
+                              _buildUsersView(),
+                              _buildSettingsView(),
+                              _buildReportsView(),
                             ],
                           ),
                         ),
@@ -234,6 +359,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       {'icon': Icons.campaign_rounded, 'label': 'Broadcasts'},
       {'icon': Icons.support_agent_rounded, 'label': 'Support Tickets'},
       {'icon': Icons.security_rounded, 'label': 'Security Console'},
+      {'icon': Icons.groups_rounded, 'label': 'Users'},
+      {'icon': Icons.settings_rounded, 'label': 'Settings'},
+      {'icon': Icons.assessment_rounded, 'label': 'Reports'},
     ];
 
     return Container(
@@ -356,6 +484,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           ),
           Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, color: Color(0xFF4F46E5)),
+                tooltip: 'Refresh Current View',
+                onPressed: () {
+                  _onTabChanged(_activeTabIndex);
+                  _showSnackBar('Refreshed current view data.', Colors.green);
+                },
+              ),
+              const SizedBox(width: 16),
               // Welcome badge
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -513,6 +650,27 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 ),
               )
             ],
+          ),
+          const SizedBox(height: 24),
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Geographic Distribution',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Company count by city registration', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  const SizedBox(height: 20),
+                  _buildGeographicBreakdown(),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -979,6 +1137,56 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // VIEW 2: TENANT (COMPANY) MANAGEMENT
   // ==========================================================
   Widget _buildCompaniesView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildCompaniesSubTab(0, 'Workspace Directory', Icons.business_rounded),
+            const SizedBox(width: 12),
+            _buildCompaniesSubTab(1, 'Subscriptions Tracking & Renewal Alerts', Icons.notifications_active_rounded),
+          ],
+        ),
+        const Divider(height: 32),
+        Expanded(
+          child: _activeCompaniesSubTabIndex == 0
+              ? _buildCompaniesListContent()
+              : _buildSubscriptionsTrackingContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompaniesSubTab(int index, String label, IconData icon) {
+    final isActive = _activeCompaniesSubTabIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _activeCompaniesSubTabIndex = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? const Color(0xFFC7D2FE) : Colors.transparent),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompaniesListContent() {
     return Card(
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1130,10 +1338,263 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
+  Widget _buildSubscriptionsTrackingContent() {
+    int activeSubscribers = 0;
+    int expiredSubscribers = 0;
+    int expiringSoon = 0;
+
+    final now = DateTime.now();
+    final next10Days = now.add(const Duration(days: 10));
+
+    for (var comp in _companies) {
+      final plan = comp['subscriptionPlan']?.toString() ?? comp['selectedPlanName']?.toString() ?? 'None';
+      if (plan.toLowerCase() != 'none' && plan.toLowerCase() != 'free trial') {
+        activeSubscribers++;
+      }
+      final expiryStr = comp['subscriptionExpiry']?.toString();
+      if (expiryStr != null) {
+        final expiry = DateTime.parse(expiryStr);
+        if (expiry.isBefore(now)) {
+          expiredSubscribers++;
+        } else if (expiry.isBefore(next10Days)) {
+          expiringSoon++;
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Summary Cards Row
+        Row(
+          children: [
+            _buildStatMiniCard('Active Plan Subscribers', '$activeSubscribers', Colors.green, Icons.check_circle_outline_rounded),
+            const SizedBox(width: 16),
+            _buildStatMiniCard('Expired Subscriptions', '$expiredSubscribers', Colors.red, Icons.cancel_outlined),
+            const SizedBox(width: 16),
+            _buildStatMiniCard('Expiring in 10 Days', '$expiringSoon', Colors.orange, Icons.warning_amber_rounded),
+          ],
+        ),
+        const SizedBox(height: 24),
+        
+        // Subscription tracking list
+        Expanded(
+          child: Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Plan Expirations & Manual Renewal Alerts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _companies.isEmpty
+                        ? const Center(child: Text("No workspaces registered."))
+                        : SingleChildScrollView(
+                            child: DataTable(
+                              horizontalMargin: 0,
+                              columnSpacing: 16,
+                              headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                              columns: const [
+                                DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Company Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                DataColumn(label: Text('Active Plan', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Auto Renew', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Expiry Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Days Remaining / Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Alert Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                              ],
+                              rows: _companies.map<DataRow>((comp) {
+                                final plan = comp['subscriptionPlan']?.toString() ?? comp['selectedPlanName']?.toString() ?? 'None';
+                                final autoRenew = comp['autoRenew'] == true;
+                                final expiryStr = comp['subscriptionExpiry']?.toString();
+                                
+                                String daysRemainingStr = 'N/A';
+                                String statusLabel = 'No Plan';
+                                Color statusColor = Colors.grey;
+
+                                if (expiryStr != null) {
+                                  final expiry = DateTime.parse(expiryStr);
+                                  final daysLeft = expiry.difference(now).inDays;
+                                  if (expiry.isBefore(now)) {
+                                    daysRemainingStr = 'Expired';
+                                    statusLabel = 'Expired';
+                                    statusColor = Colors.red;
+                                  } else {
+                                    daysRemainingStr = '$daysLeft Days Left';
+                                    if (daysLeft <= 10) {
+                                      statusLabel = 'Expiring Soon';
+                                      statusColor = Colors.orange;
+                                    } else {
+                                      statusLabel = 'Active';
+                                      statusColor = Colors.green;
+                                    }
+                                  }
+                                }
+
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Padding(
+                                      padding: const EdgeInsets.only(left: 16),
+                                      child: Text(comp['companyName']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    )),
+                                    DataCell(Text(plan)),
+                                    DataCell(Row(
+                                      children: [
+                                        Icon(autoRenew ? Icons.check_circle_rounded : Icons.cancel_rounded, color: autoRenew ? Colors.green : Colors.grey, size: 16),
+                                        const SizedBox(width: 6),
+                                        Text(autoRenew ? 'Enabled' : 'Disabled', style: TextStyle(fontSize: 12, color: autoRenew ? Colors.green : Colors.grey)),
+                                      ],
+                                    )),
+                                    DataCell(Text(expiryStr != null 
+                                        ? DateFormat('dd MMM yyyy').format(DateTime.parse(expiryStr)) 
+                                        : 'Lifetime')),
+                                    DataCell(Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                      child: Text('$daysRemainingStr ($statusLabel)', style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    )),
+                                    DataCell(Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.sync_rounded, color: Colors.indigo),
+                                          tooltip: 'Toggle Auto-Renewal',
+                                          onPressed: () async {
+                                            setState(() => _isLoading = true);
+                                            try {
+                                              final res = await _api.post('/superadmin/companies/${comp['_id']}/toggle-autorenew');
+                                              if (res.statusCode == 200) {
+                                                _showSnackBar(res.data['message'] ?? 'Auto-renew toggled successfully!', Colors.green);
+                                                _fetchCompanies();
+                                              }
+                                            } catch (e) {
+                                              _showSnackBar('Failed to toggle auto-renew: $e', Colors.redAccent);
+                                            } finally {
+                                              setState(() => _isLoading = false);
+                                            }
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.notification_important_rounded, color: Colors.orange),
+                                          tooltip: 'Send Renewal Alert Notification',
+                                          onPressed: () => _sendRenewalAlert(comp['_id']),
+                                        ),
+                                      ],
+                                    )),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatMiniCard(String title, String value, Color color, IconData icon) {
+    return Expanded(
+      child: Card(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  const SizedBox(height: 4),
+                  Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                ],
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendRenewalAlert(String companyId) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/superadmin/companies/$companyId/send-renewal-alert');
+      if (res.statusCode == 200) {
+        _showSnackBar(res.data['message'] ?? 'Renewal alert sent successfully!', Colors.green);
+      }
+    } catch (e) {
+      _showSnackBar('Failed to send renewal alert: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   // ==========================================================
   // VIEW 3: SUBSCRIPTION PLANS CRUD
   // ==========================================================
   Widget _buildPlansView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildPlansSubTab(0, 'Subscription Tiers', Icons.card_membership_rounded),
+            const SizedBox(width: 12),
+            _buildPlansSubTab(1, 'Coupon Codes (Discounts)', Icons.local_offer_rounded),
+          ],
+        ),
+        const Divider(height: 32),
+        Expanded(
+          child: _activePlansSubTabIndex == 0
+              ? _buildSubscriptionTiersContent()
+              : _buildCouponsContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlansSubTab(int index, String label, IconData icon) {
+    final isActive = _activePlansSubTabIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _activePlansSubTabIndex = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? const Color(0xFFC7D2FE) : Colors.transparent),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionTiersContent() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1302,8 +1763,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
-  // ==========================================================
-  // VIEW 4: B2B ANNOUNCEMENTS
+  // =====================================  // VIEW 4: B2B ANNOUNCEMENTS
   // ==========================================================
   final _announcementFormKey = GlobalKey<FormState>();
   final _announceTitleController = TextEditingController();
@@ -1312,8 +1772,62 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   String _announceAudience = 'All';
   bool _announceEmailChannel = true;
   bool _announceSmsChannel = false;
+  int _activeBroadcastSubTabIndex = 0; // 0: Send, 1: History
 
   Widget _buildAnnouncementsView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildBroadcastSubTab(0, 'Dispatch Broadcast', Icons.campaign_rounded),
+            const SizedBox(width: 12),
+            _buildBroadcastSubTab(1, 'Sent History & Read Receipts', Icons.history_rounded),
+          ],
+        ),
+        const Divider(height: 32),
+        Expanded(
+          child: _activeBroadcastSubTabIndex == 0
+              ? _buildNewBroadcastForm()
+              : _buildBroadcastHistoryContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBroadcastSubTab(int index, String label, IconData icon) {
+    final isActive = _activeBroadcastSubTabIndex == index;
+    return InkWell(
+      onTap: () {
+        setState(() => _activeBroadcastSubTabIndex = index);
+        if (index == 1) _fetchAnnouncements();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? const Color(0xFFC7D2FE) : Colors.transparent),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewBroadcastForm() {
     return Card(
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1396,6 +1910,52 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Scheduling Option
+                SwitchListTile(
+                  title: const Text('Schedule for later', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                    _announceScheduledAt == null
+                        ? 'Send immediately'
+                        : 'Scheduled at: ${DateFormat('dd MMM yyyy, hh:mm a').format(_announceScheduledAt!)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  value: _announceScheduleLater,
+                  activeColor: const Color(0xFF4F46E5),
+                  onChanged: (val) async {
+                    if (val) {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now().add(const Duration(minutes: 10)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (date != null) {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.now(),
+                        );
+                        if (time != null) {
+                          setState(() {
+                            _announceScheduledAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                            _announceScheduleLater = true;
+                          });
+                          return;
+                        }
+                      }
+                      setState(() {
+                        _announceScheduleLater = false;
+                        _announceScheduledAt = null;
+                      });
+                    } else {
+                      setState(() {
+                        _announceScheduleLater = false;
+                        _announceScheduledAt = null;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+
                 // Message Text
                 TextFormField(
                   controller: _announceMsgController,
@@ -1413,7 +1973,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 ElevatedButton.icon(
                   onPressed: () => _triggerAnnouncementDispatch(),
                   icon: const Icon(Icons.rocket_launch_rounded),
-                  label: const Text('Dispatch Broadcast'),
+                  label: Text(_announceScheduleLater ? 'Schedule Broadcast' : 'Dispatch Broadcast'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF43F5E), // Rose 500
                     foregroundColor: Colors.white,
@@ -1434,7 +1994,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final res = await _api.post('/superadmin/announcements', data: {
+      final body = <String, dynamic>{
         'title': _announceTitleController.text.trim(),
         'message': _announceMsgController.text.trim(),
         'priority': _announcePriority,
@@ -1443,12 +2003,25 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           'email': _announceEmailChannel,
           'sms': _announceSmsChannel,
         }
-      });
+      };
+
+      if (_announceScheduleLater && _announceScheduledAt != null) {
+        body['scheduledAt'] = _announceScheduledAt!.toIso8601String();
+      }
+
+      final res = await _api.post('/superadmin/announcements', data: body);
 
       if (res.statusCode == 201) {
-        _showSnackBar('Broadcast successfully dispatched!', Colors.green);
+        _showSnackBar(
+          _announceScheduleLater ? 'Broadcast successfully scheduled!' : 'Broadcast successfully dispatched!',
+          Colors.green,
+        );
         _announceTitleController.clear();
         _announceMsgController.clear();
+        setState(() {
+          _announceScheduleLater = false;
+          _announceScheduledAt = null;
+        });
         _fetchAnalytics();
       }
     } catch (e) {
@@ -3124,5 +3697,2828 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         ],
       );
     }
+  }
+
+  // ==========================================================
+  // VIEW 7: USER MANAGEMENT VIEW
+  // ==========================================================
+  Widget _buildUsersView() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Filter and Action controls header
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Search users...',
+                      prefixIcon: Icon(Icons.search_rounded),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _userSearchQuery = val.trim().toLowerCase();
+                        _applyUserFilters();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                DropdownButton<String>(
+                  value: _selectedUserRoleFilter,
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.filter_alt_rounded),
+                  hint: const Text('Role'),
+                  items: ['All', 'Admin', 'HR', 'Employee'].map((role) {
+                    return DropdownMenuItem(value: role, child: Text(role));
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedUserRoleFilter = val!;
+                      _applyUserFilters();
+                    });
+                  },
+                ),
+                const SizedBox(width: 12),
+                DropdownButton<String>(
+                  value: _selectedUserCompanyFilter,
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.business_rounded),
+                  hint: const Text('Company'),
+                  items: _userCompanies.map((comp) {
+                    return DropdownMenuItem(value: comp, child: Text(comp));
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedUserCompanyFilter = val!;
+                      _applyUserFilters();
+                    });
+                  },
+                ),
+                const SizedBox(width: 12),
+                DropdownButton<String>(
+                  value: _selectedUserStatusFilter,
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.info_outline_rounded),
+                  hint: const Text('Status'),
+                  items: ['All', 'Active', 'Blocked', 'Inactive', 'Suspended'].map((status) {
+                    return DropdownMenuItem(value: status, child: Text(status));
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedUserStatusFilter = val!;
+                      _applyUserFilters();
+                    });
+                  },
+                ),
+                const SizedBox(width: 12),
+                if (_selectedUserIds.isNotEmpty)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    onPressed: _bulkDeactivate,
+                    icon: const Icon(Icons.block_rounded),
+                    label: Text('Bulk Deactivate (${_selectedUserIds.length})'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _filteredUsers.isEmpty
+                  ? const Center(child: Text('No matching users found.'))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: [
+                          const DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Select'))),
+                          const DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Company', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _filteredUsers.map<DataRow>((u) {
+                          final isSelected = _selectedUserIds.contains(u['id']);
+                          final status = u['status']?.toString() ?? 'Active';
+                          final role = u['role']?.toString() ?? 'Employee';
+                          final statusColor = status.toLowerCase() == 'active' ? Colors.green : Colors.red;
+
+                          return DataRow(
+                            cells: [
+                              DataCell(Checkbox(
+                                value: isSelected,
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedUserIds.add(u['id']);
+                                    } else {
+                                      _selectedUserIds.remove(u['id']);
+                                    }
+                                  });
+                                },
+                              )),
+                              DataCell(Text(u['name']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
+                              DataCell(Text(u['email']?.toString() ?? 'N/A')),
+                              DataCell(Text(role)),
+                              DataCell(Text(u['company']?.toString() ?? 'N/A')),
+                              DataCell(Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                child: Text(status, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                              )),
+                              DataCell(Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.vpn_key_rounded, color: Colors.blue, size: 18),
+                                    tooltip: 'Force Reset Password',
+                                    onPressed: () => _showResetPasswordDialog(u),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(status.toLowerCase() == 'active' ? Icons.block_rounded : Icons.check_circle_outline_rounded, color: Colors.orange, size: 18),
+                                    tooltip: status.toLowerCase() == 'active' ? 'Block User' : 'Activate User',
+                                    onPressed: () => _toggleUserBlock(u, status),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.visibility_rounded, color: Colors.indigo, size: 18),
+                                    tooltip: 'Impersonate User',
+                                    onPressed: () => _impersonateUser(u),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.history_rounded, color: Colors.teal, size: 18),
+                                    tooltip: 'View History Logs',
+                                    onPressed: () => _viewUserLogs(u),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
+                                    tooltip: 'Delete User',
+                                    onPressed: () => _confirmDeleteUser(u),
+                                  ),
+                                ],
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyUserFilters() {
+    setState(() {
+      _filteredUsers = _users.where((u) {
+        final matchesSearch = (u['name']?.toString() ?? '').toLowerCase().contains(_userSearchQuery) ||
+            (u['email']?.toString() ?? '').toLowerCase().contains(_userSearchQuery);
+        final matchesRole = _selectedUserRoleFilter == 'All' ||
+            (u['role']?.toString() ?? '').toLowerCase() == _selectedUserRoleFilter.toLowerCase();
+        final matchesCompany = _selectedUserCompanyFilter == 'All' ||
+            (u['company']?.toString() ?? '') == _selectedUserCompanyFilter;
+        
+        final uStatus = (u['status']?.toString() ?? 'Active').toLowerCase();
+        final filterStatus = _selectedUserStatusFilter.toLowerCase();
+        final matchesStatus = _selectedUserStatusFilter == 'All' ||
+            (filterStatus == 'blocked' && (uStatus == 'blocked' || uStatus == 'suspended')) ||
+            uStatus == filterStatus;
+
+        return matchesSearch && matchesRole && matchesCompany && matchesStatus;
+      }).toList();
+    });
+  }
+
+  // ==========================================================
+  // VIEW 8: SETTINGS & TEAM MANAGEMENT VIEW
+  // ==========================================================
+  Widget _buildSettingsView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildSettingsSubTab(0, 'Global System Configuration', Icons.settings_applications_rounded),
+            const SizedBox(width: 12),
+            _buildSettingsSubTab(1, 'Our Team (Super Admins)', Icons.badge_rounded),
+          ],
+        ),
+        const Divider(height: 32),
+        Expanded(
+          child: _activeSettingsSubTabIndex == 0
+              ? _buildSystemConfigView()
+              : _buildSuperAdminTeamView(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsSubTab(int index, String label, IconData icon) {
+    final isActive = _activeSettingsSubTabIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _activeSettingsSubTabIndex = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? const Color(0xFFC7D2FE) : Colors.transparent),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSystemConfigView() {
+    return SingleChildScrollView(
+      child: Form(
+        key: _settingsFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // General Settings Card
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('General Localization Settings', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedLanguage,
+                            decoration: const InputDecoration(labelText: 'Default Language', border: OutlineInputBorder()),
+                            items: ['English', 'Spanish', 'Hindi', 'French'].map((lang) {
+                              return DropdownMenuItem(value: lang, child: Text(lang));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedLanguage = val!),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedTimezone,
+                            decoration: const InputDecoration(labelText: 'Default Timezone', border: OutlineInputBorder()),
+                            items: ['UTC', 'IST', 'EST', 'PST', 'GMT'].map((tz) {
+                              return DropdownMenuItem(value: tz, child: Text(tz));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedTimezone = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedDateFormat,
+                            decoration: const InputDecoration(labelText: 'Date Format', border: OutlineInputBorder()),
+                            items: ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY'].map((df) {
+                              return DropdownMenuItem(value: df, child: Text(df));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedDateFormat = val!),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedCurrency,
+                            decoration: const InputDecoration(labelText: 'Currency Symbol', border: OutlineInputBorder()),
+                            items: ['INR', 'USD', 'EUR', 'GBP'].map((cur) {
+                              return DropdownMenuItem(value: cur, child: Text(cur));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedCurrency = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Maintenance Mode Card
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Maintenance Mode Toggle', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        Switch(
+                          value: _maintenanceMode,
+                          activeColor: const Color(0xFF4F46E5),
+                          onChanged: (val) => setState(() => _maintenanceMode = val),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _maintenanceType,
+                      decoration: const InputDecoration(labelText: 'Maintenance Severity', border: OutlineInputBorder()),
+                      items: ['Full', 'Partial'].map((type) {
+                        return DropdownMenuItem(value: type, child: Text(type == 'Full' ? 'Full (Disable All Writes/Access)' : 'Partial (Read-only status)'));
+                      }).toList(),
+                      onChanged: (val) => setState(() => _maintenanceType = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _settingsMaintenanceMsgController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(labelText: 'Custom System Message', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Security Controls Card
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Global Security Policies', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedPasswordComplexity,
+                            decoration: const InputDecoration(labelText: 'Password Complexity Requirement', border: OutlineInputBorder()),
+                            items: ['Strong', 'Medium', 'Standard'].map((comp) {
+                              return DropdownMenuItem(value: comp, child: Text(comp));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedPasswordComplexity = val!),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedEnforce2FA,
+                            decoration: const InputDecoration(labelText: 'Enforce Multi-Factor (MFA/2FA)', border: OutlineInputBorder()),
+                            items: ['Admin Only', 'HR Only', 'All Roles', 'Disabled'].map((fa) {
+                              return DropdownMenuItem(value: fa, child: Text(fa));
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedEnforce2FA = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Text('Auto Logout Session Timeout: ${_sessionTimeoutMinutes.toInt()} Minutes', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Slider(
+                      value: _sessionTimeoutMinutes,
+                      min: 5,
+                      max: 120,
+                      divisions: 23,
+                      label: '${_sessionTimeoutMinutes.toInt()} min',
+                      activeColor: const Color(0xFF4F46E5),
+                      onChanged: (val) => setState(() => _sessionTimeoutMinutes = val),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // SMTP Email Config Card
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('SMTP Outbound Email Config', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _showSnackBar("Test email successfully dispatched to global administrator!", Colors.green);
+                          },
+                          icon: const Icon(Icons.send_rounded, size: 14),
+                          label: const Text('Send Test Email'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _smtpHostController,
+                            decoration: const InputDecoration(labelText: 'SMTP Server Hostname', border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _smtpPortController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'SMTP Server Port', border: OutlineInputBorder()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _smtpUserController,
+                            decoration: const InputDecoration(labelText: 'SMTP Server Username', border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _smtpPassController,
+                            obscureText: true,
+                            decoration: const InputDecoration(labelText: 'SMTP Server Password', border: OutlineInputBorder()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Module Feature Flags Card
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Global Module Toggles (Feature Flags)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 8),
+                    const Text('Enable or disable specific modules globally across all registered tenant companies', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    const SizedBox(height: 20),
+                    Wrap(
+                      spacing: 24,
+                      runSpacing: 16,
+                      children: _settingsModules.keys.map((modKey) {
+                        final val = _settingsModules[modKey]!;
+                        final label = modKey[0].toUpperCase() + modKey.substring(1);
+                        return SizedBox(
+                          width: 220,
+                          child: SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            value: val,
+                            activeColor: const Color(0xFF10B981),
+                            onChanged: (newVal) {
+                              setState(() {
+                                _settingsModules[modKey] = newVal;
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Save Settings Control Action
+            ElevatedButton.icon(
+              onPressed: _savePlatformSettings,
+              icon: const Icon(Icons.save_rounded),
+              label: const Text('Save System Configurations'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _savePlatformSettings() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/superadmin/settings', data: {
+        'defaultLanguage': _selectedLanguage,
+        'defaultTimezone': _selectedTimezone,
+        'dateFormat': _selectedDateFormat,
+        'currency': _selectedCurrency,
+        'maintenanceMode': _maintenanceMode,
+        'maintenanceType': _maintenanceType,
+        'maintenanceMessage': _settingsMaintenanceMsgController.text.trim(),
+        'passwordComplexity': _selectedPasswordComplexity,
+        'enforce2FA': _selectedEnforce2FA,
+        'sessionTimeoutMinutes': _sessionTimeoutMinutes.toInt(),
+        'smtpHost': _smtpHostController.text.trim(),
+        'smtpPort': int.tryParse(_smtpPortController.text) ?? 587,
+        'smtpUser': _smtpUserController.text.trim(),
+        'smtpPass': _smtpPassController.text.trim(),
+        'modules': _settingsModules,
+      });
+
+      if (res.statusCode == 200) {
+        _showSnackBar("System settings updated successfully!", Colors.green);
+        _fetchSettingsData();
+      }
+    } catch (e) {
+      _showSnackBar("Failed to save settings: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildSuperAdminTeamView() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Super Admin Team Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                ElevatedButton.icon(
+                  onPressed: _showInviteTeamMemberDialog,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('Invite Team Member'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _teamMembers.isEmpty
+                  ? const Center(child: Text("No team members added."))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
+                          DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                          DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Sub Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('MFA Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _teamMembers.map<DataRow>((member) {
+                          final mfa = member['twoFactorEnabled'] == true;
+                          return DataRow(
+                            cells: [
+                              DataCell(Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(member['name']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              )),
+                              DataCell(Text(member['email']?.toString() ?? 'N/A')),
+                              DataCell(Text(member['subRole']?.toString() ?? 'Support')),
+                              DataCell(Text(mfa ? 'Enforced' : 'Disabled', style: TextStyle(color: mfa ? Colors.green : Colors.grey, fontWeight: FontWeight.bold))),
+                              DataCell(Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                                    onPressed: () => _showEditTeamMemberDialog(member),
+                                    tooltip: 'Edit Sub Role',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.receipt_long_rounded, color: Colors.teal),
+                                    onPressed: () => _viewTeamMemberLogs(member),
+                                    tooltip: 'View Member Activity Logs',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.person_remove_rounded, color: Colors.red),
+                                    onPressed: () => _deleteTeamMember(member['_id']),
+                                    tooltip: 'Delete Member',
+                                  ),
+                                ],
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // VIEW 9: MASTER DATA MANAGEMENT VIEW
+  // ==========================================================
+  Widget _buildMasterDataView() {
+    final categories = {
+      'Department': '🏢 Departments',
+      'Designation': '👔 Designations / Job Titles',
+      'Skill': '🎯 Skills',
+      'LeaveType': '📅 Leave Types',
+      'Holiday': '🗓️ Holiday Calendar Templates',
+      'SalaryComponent': '💰 Salary Components',
+      'DocumentType': '📁 Document Types',
+      'KPI': '📈 KPI / Performance Templates',
+      'ExpenseCategory': '🧾 Expense Categories',
+      'AssetCategory': '🖥️ Asset Categories',
+    };
+
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _activeMasterDataCategory,
+                    decoration: const InputDecoration(labelText: 'Master Data Category', border: OutlineInputBorder()),
+                    items: categories.entries.map((item) {
+                      return DropdownMenuItem(value: item.key, child: Text(item.value));
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _activeMasterDataCategory = val!;
+                        _fetchMasterData();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _showCreateMasterDataDialog,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add Global Template'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _masterDataItems.isEmpty
+                  ? const Center(child: Text('No master data templates created.'))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
+                          DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Template Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                          DataColumn(label: Text('Description', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _masterDataItems.map<DataRow>((item) {
+                          final active = item['isActive'] ?? true;
+                          return DataRow(
+                            cells: [
+                              DataCell(Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(item['name']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              )),
+                              DataCell(Text(item['description']?.toString() ?? 'N/A')),
+                              DataCell(Text(active ? 'Active' : 'Inactive', style: TextStyle(color: active ? Colors.green : Colors.red, fontWeight: FontWeight.bold))),
+                              DataCell(Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                                    onPressed: () => _showEditMasterDataDialog(item),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                    onPressed: () => _deleteMasterData(item['_id']),
+                                  ),
+                                ],
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // VIEW 10: RBAC / ROLE MANAGEMENT VIEW
+  // ==========================================================
+  Widget _buildRolesView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildRbacSubTab(0, 'Global Roles & Permissions Map', Icons.admin_panel_settings_rounded),
+            const SizedBox(width: 12),
+            _buildRbacSubTab(1, 'Platform Permission Security Audit Logs', Icons.security_rounded),
+          ],
+        ),
+        const Divider(height: 32),
+        Expanded(
+          child: _activeRbacSubTabIndex == 0
+              ? _buildRbacRolesContent()
+              : _buildRbacAuditLogsContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRbacSubTab(int index, String label, IconData icon) {
+    final isActive = _activeRbacSubTabIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _activeRbacSubTabIndex = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? const Color(0xFFC7D2FE) : Colors.transparent),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRbacRolesContent() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Global Authority Roles', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                ElevatedButton.icon(
+                  onPressed: _showCreateRoleDialog,
+                  icon: const Icon(Icons.add_moderator_rounded),
+                  label: const Text('Create Role'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _rbacRoles.isEmpty
+                  ? const Center(child: Text("No global roles created."))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
+                          DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Role Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                          DataColumn(label: Text('Scope', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Permissions Count', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _rbacRoles.map<DataRow>((role) {
+                          final List? perms = role['permissions'] as List?;
+                          final trueCount = perms?.length ?? 0;
+                          return DataRow(
+                            cells: [
+                              DataCell(Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(role['roleName']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              )),
+                              DataCell(Text(role['scope']?.toString() ?? 'Global')),
+                              DataCell(Text(role['subRoleCategory']?.toString() ?? 'Standard')),
+                              DataCell(Text('$trueCount Permissions')),
+                              DataCell(Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                                    onPressed: () => _showEditRoleDialog(role),
+                                    tooltip: 'Edit Permissions',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.copy_rounded, color: Colors.teal),
+                                    onPressed: () => _cloneRole(role),
+                                    tooltip: 'Clone Role',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                    onPressed: () => _deleteRole(role['_id']),
+                                    tooltip: 'Delete Role',
+                                  ),
+                                ],
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRbacAuditLogsContent() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Role & Permission Changes Security Ledger', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _rbacAuditLogs.isEmpty
+                  ? const Center(child: Text("No security logs created."))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
+                          DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Timestamp', style: TextStyle(fontWeight: FontWeight.bold)))),
+                          DataColumn(label: Text('Trigger Operator', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Action Code', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Security Details', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _rbacAuditLogs.map<DataRow>((log) {
+                          final rawTime = log['createdAt']?.toString() ?? '';
+                          String timeStr = 'N/A';
+                          if (rawTime.isNotEmpty) {
+                            try {
+                              timeStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(rawTime));
+                            } catch (_) {}
+                          }
+                          final actionBy = log['actionBy'] as Map?;
+                          return DataRow(
+                            cells: [
+                              DataCell(Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(timeStr),
+                              )),
+                              DataCell(Text(actionBy != null ? '${actionBy['name']} (${actionBy['email']})' : 'System')),
+                              DataCell(Text(log['actionType']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
+                              DataCell(Text(log['details']?.toString() ?? 'N/A')),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // VIEW 11: REPORTS & EXPORT VIEW
+  // ==========================================================
+  Widget _buildReportsView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _buildReportCard('growth', '🏢 Company Growth', Icons.business_center_rounded),
+            const SizedBox(width: 12),
+            _buildReportCard('revenue', '💰 Revenue Trends', Icons.monetization_on_rounded),
+            const SizedBox(width: 12),
+            _buildReportCard('user_activity', '👤 Active User Role', Icons.group_work_rounded),
+            const SizedBox(width: 12),
+            _buildReportCard('subscription', '💳 Subscriptions', Icons.card_membership_rounded),
+            const SizedBox(width: 12),
+            _buildReportCard('support', '🎫 Support Tickets', Icons.support_agent_rounded),
+            const SizedBox(width: 12),
+            _buildReportCard('hr_usage', '📈 Industry Usage', Icons.pie_chart_rounded),
+          ],
+        ),
+        const Divider(height: 24),
+        Card(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final selectedRange = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                      initialDateRange: _reportDateRange,
+                    );
+                    if (selectedRange != null) {
+                      setState(() {
+                        _reportDateRange = selectedRange;
+                      });
+                      _fetchReportsData();
+                    }
+                  },
+                  icon: const Icon(Icons.date_range_rounded),
+                  label: Text(_reportDateRange == null
+                      ? 'Select Date Range'
+                      : '${DateFormat('dd/MM/yy').format(_reportDateRange!.start)} - ${DateFormat('dd/MM/yy').format(_reportDateRange!.end)}'),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
+                  onPressed: _fetchReportsData,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reload Report'),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => _exportCsv(_selectedReportType.toUpperCase(), _reportData),
+                  icon: const Icon(Icons.file_download_rounded),
+                  label: const Text('Export CSV'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _exportExcel(_selectedReportType.toUpperCase(), _reportData),
+                  icon: const Icon(Icons.table_chart_rounded),
+                  label: const Text('Export Excel'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _exportPdf(_selectedReportType.toUpperCase(), _reportData),
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  label: const Text('Export PDF'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  onPressed: _showScheduleReportDialog,
+                  icon: const Icon(Icons.mail_outline_rounded),
+                  label: const Text('Schedule'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Report: ${_selectedReportType.toUpperCase()}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _reportData.isEmpty
+                        ? const Center(child: Text("No records match the active criteria filters."))
+                        : SingleChildScrollView(
+                            child: _buildReportDataTable(),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReportCard(String type, String label, IconData icon) {
+    final isActive = _selectedReportType == type;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedReportType = type;
+            _reportData.clear();
+          });
+          _fetchReportsData();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF4F46E5) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isActive ? Colors.transparent : const Color(0xFFE2E8F0)),
+            boxShadow: isActive ? [BoxShadow(color: const Color(0xFF4F46E5).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isActive ? Colors.white : const Color(0xFF64748B), size: 24),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(color: isActive ? Colors.white : const Color(0xFF1E293B), fontSize: 11, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportDataTable() {
+    final Map<String, dynamic> firstRow = _reportData.first;
+    final headers = firstRow.keys.toList();
+    return DataTable(
+      horizontalMargin: 0,
+      columnSpacing: 16,
+      headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+      columns: headers.map((h) => DataColumn(label: Text(h, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
+      rows: _reportData.map<DataRow>((row) {
+        return DataRow(
+          cells: headers.map((h) => DataCell(Text(row[h]?.toString() ?? ''))).toList(),
+        );
+      }).toList(),
+    );
+  }
+
+  // ==========================================================
+  // API HELPER INTERACTION FUNCTIONS
+  // ==========================================================
+
+  // Users Helpers
+  Future<void> _fetchUsersData() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/superadmin/users');
+      if (res.statusCode == 200) {
+        setState(() {
+          _users = res.data ?? [];
+          _filteredUsers = List.from(_users);
+          final companies = _users.map((u) => u['company']?.toString() ?? 'N/A').toSet().toList();
+          companies.remove('N/A');
+          companies.sort();
+          _userCompanies = ['All', ...companies];
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Failed to load users: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchSettingsData() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/superadmin/settings');
+      if (res.statusCode == 200) {
+        setState(() {
+          _systemSettings = res.data ?? {};
+          _selectedLanguage = _systemSettings['defaultLanguage']?.toString() ?? 'English';
+          _selectedTimezone = _systemSettings['defaultTimezone']?.toString() ?? 'UTC';
+          _selectedDateFormat = _systemSettings['dateFormat']?.toString() ?? 'YYYY-MM-DD';
+          _selectedCurrency = _systemSettings['currency']?.toString() ?? 'INR';
+          _smtpHostController.text = _systemSettings['smtpHost']?.toString() ?? '';
+          _smtpPortController.text = (_systemSettings['smtpPort'] ?? 587).toString();
+          _smtpUserController.text = _systemSettings['smtpUser']?.toString() ?? '';
+          _smtpPassController.text = _systemSettings['smtpPass']?.toString() ?? '';
+          _maintenanceMode = _systemSettings['maintenanceMode'] == true;
+          _maintenanceType = _systemSettings['maintenanceType']?.toString() ?? 'Full';
+          _settingsMaintenanceMsgController.text = _systemSettings['maintenanceMessage']?.toString() ?? '';
+          _selectedPasswordComplexity = _systemSettings['passwordComplexity']?.toString() ?? 'Strong';
+          _selectedEnforce2FA = _systemSettings['enforce2FA']?.toString() ?? 'Admin Only';
+          _sessionTimeoutMinutes = double.tryParse((_systemSettings['sessionTimeoutMinutes'] ?? 30).toString()) ?? 30.0;
+          final mods = _systemSettings['modules'] as Map?;
+          if (mods != null) {
+            _settingsModules = mods.map((k, v) => MapEntry(k.toString(), v == true));
+          }
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Failed to load settings: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchMasterData() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/master-data', queryParameters: {'category': _activeMasterDataCategory});
+      if (res.statusCode == 200) {
+        setState(() {
+          _masterDataItems = res.data ?? [];
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Failed to load templates: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchRolesData() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/rbac/roles');
+      if (res.statusCode == 200) {
+        setState(() {
+          _rbacRoles = res.data ?? [];
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Failed to load roles: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchAuditLogs() async {
+    try {
+      final res = await _api.get('/rbac/audit-logs');
+      if (res.statusCode == 200) {
+        setState(() {
+          _rbacAuditLogs = res.data ?? [];
+        });
+      }
+    } catch (e) {
+      print("Audit load fail: $e");
+    }
+  }
+
+  Future<void> _fetchReportsData() async {
+    setState(() => _isLoading = true);
+    try {
+      final Map<String, dynamic> params = {'type': _selectedReportType};
+      if (_reportDateRange != null) {
+        params['startDate'] = _reportDateRange!.start.toIso8601String();
+        params['endDate'] = _reportDateRange!.end.toIso8601String();
+      }
+      final res = await _api.get('/reports/platform-metrics', queryParameters: params);
+      if (res.statusCode == 200 && res.data['success'] == true) {
+        setState(() {
+          _reportData = res.data['data'] ?? [];
+        });
+      }
+      _fetchScheduledReports();
+    } catch (e) {
+      _showSnackBar("Report failed: $e", Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchScheduledReports() async {
+    try {
+      final res = await _api.get('/reports/platform-metrics/scheduled-jobs');
+      if (res.statusCode == 200 && res.data['success'] == true) {
+        setState(() {
+          _scheduledReports = res.data['data'] ?? [];
+        });
+      }
+    } catch (e) {
+      print("Scheduled load fail: $e");
+    }
+  }
+
+  Future<void> _fetchCoupons() async {
+    try {
+      final res = await _api.get('/superadmin/coupons');
+      if (res.statusCode == 200) {
+        setState(() {
+          _coupons = res.data ?? [];
+        });
+      }
+    } catch (e) {
+      print("Coupons load fail: $e");
+    }
+  }
+
+  Future<void> _fetchTeamMembers() async {
+    try {
+      final res = await _api.get('/super-admin/team/all');
+      if (res.statusCode == 200 && res.data['success'] == true) {
+        setState(() {
+          _teamMembers = res.data['data'] ?? [];
+        });
+      }
+    } catch (e) {
+      print("Team load fail: $e");
+    }
+  }
+
+  List<dynamic> _announcementsList = [];
+  Future<void> _fetchAnnouncements() async {
+    try {
+      final res = await _api.get('/superadmin/announcements');
+      if (res.statusCode == 200) {
+        setState(() {
+          _announcementsList = res.data ?? [];
+        });
+      }
+    } catch (e) {
+      print("Announcements fetch failed: $e");
+    }
+  }
+
+  Future<void> _impersonateUser(dynamic u) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/superadmin/users/${u['id']}/impersonate');
+      if (res.statusCode == 200) {
+        final token = res.data['token'];
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        await auth.impersonate(token);
+        _showSnackBar(res.data['message'] ?? 'Impersonation started.', Colors.green);
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
+    } catch (e) {
+      _showSnackBar('Impersonation failed: $e', Colors.redAccent);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _toggleUserBlock(dynamic u, String currentStatus) async {
+    final targetStatus = currentStatus.toLowerCase() == 'active' ? 'Blocked' : 'Active';
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.put('/superadmin/users/${u['id']}/status', data: {'status': targetStatus});
+      if (res.statusCode == 200) {
+        _showSnackBar('Status updated to $targetStatus successfully!', Colors.green);
+        _fetchUsersData();
+      }
+    } catch (e) {
+      _showSnackBar('Status change failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _confirmDeleteUser(dynamic u) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⚠️ Permanently Delete User?'),
+        content: Text('Are you sure you want to delete "${u['name']}"? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                final res = await _api.delete('/superadmin/users/${u['id']}');
+                if (res.statusCode == 200) {
+                  _showSnackBar('User deleted successfully.', Colors.green);
+                  _fetchUsersData();
+                }
+              } catch (e) {
+                _showSnackBar('Delete failed: $e', Colors.redAccent);
+              } finally {
+                setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _resetUserPassword(dynamic u, String newPass) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/superadmin/users/${u['id']}/reset-password', data: {'newPassword': newPass});
+      if (res.statusCode == 200) {
+        _showSnackBar('Password reset successfully for ${u['name']}!', Colors.green);
+      }
+    } catch (e) {
+      _showSnackBar('Reset failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _viewUserLogs(dynamic u) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/superadmin/users/${u['id']}/logs');
+      if (res.statusCode == 200) {
+        final logsList = res.data['logs'] as List? ?? [];
+        _showUserLogsDialog(u, logsList);
+      }
+    } catch (e) {
+      _showSnackBar('Logs fetch failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _bulkDeactivate() async {
+    if (_selectedUserIds.isEmpty) return;
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/superadmin/users/bulk-deactivate', data: {'userIds': _selectedUserIds.toList()});
+      if (res.statusCode == 200) {
+        _showSnackBar('Bulk deactivation successful!', Colors.green);
+        _selectedUserIds.clear();
+        _fetchUsersData();
+      }
+    } catch (e) {
+      _showSnackBar('Bulk action failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Dialog implementations
+
+  void _showResetPasswordDialog(dynamic u) {
+    _resetPasswordController.clear();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Reset Password for ${u['name']}'),
+        content: TextFormField(
+          controller: _resetPasswordController,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final newPass = _resetPasswordController.text.trim();
+              if (newPass.isEmpty) return;
+              Navigator.pop(ctx);
+              _resetUserPassword(u, newPass);
+            },
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUserLogsDialog(dynamic u, List<dynamic> logs) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Activity History for ${u['name']}'),
+        content: SizedBox(
+          width: 500,
+          height: 400,
+          child: logs.isEmpty
+              ? const Center(child: Text('No activity logs found for this user.'))
+              : ListView.builder(
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) {
+                    final log = logs[index];
+                    final date = DateTime.parse(log['timestamp'].toString());
+                    final formattedTime = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+                    return ListTile(
+                      title: Text(log['activity']?.toString() ?? 'N/A'),
+                      subtitle: Text('IP: ${log['ip']} • Device: ${log['device']}'),
+                      trailing: Text(formattedTime, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  void _showCreateCouponDialog() {
+    _couponCodeController.clear();
+    _couponValueController.clear();
+    _couponMaxUsesController.clear();
+    _couponDiscountType = 'Percentage';
+    _couponExpiryDate = null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Generate Discount Coupon'),
+          content: Form(
+            key: _couponFormKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _couponCodeController,
+                  decoration: const InputDecoration(labelText: 'Coupon Code (Unique)', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _couponDiscountType,
+                  decoration: const InputDecoration(labelText: 'Discount Type', border: OutlineInputBorder()),
+                  items: ['Percentage', 'Fixed'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (v) => setModalState(() => _couponDiscountType = v!),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _couponValueController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Discount Value', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _couponMaxUsesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Max Uses Limit (Optional)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now().add(const Duration(days: 30)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (d != null) {
+                      setModalState(() => _couponExpiryDate = d);
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded),
+                  label: Text(_couponExpiryDate == null
+                      ? 'Select Expiry Date'
+                      : DateFormat('dd MMM yyyy').format(_couponExpiryDate!)),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_couponFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final res = await _api.post('/superadmin/coupons', data: {
+                    'code': _couponCodeController.text.trim().toUpperCase(),
+                    'discountType': _couponDiscountType,
+                    'discountValue': double.tryParse(_couponValueController.text) ?? 0.0,
+                    'maxUses': int.tryParse(_couponMaxUsesController.text),
+                    'expiryDate': _couponExpiryDate?.toIso8601String(),
+                  });
+                  if (res.statusCode == 201) {
+                    _showSnackBar('Coupon successfully generated!', Colors.green);
+                    _fetchCoupons();
+                  }
+                } catch (e) {
+                  _showSnackBar('Generation failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleCouponStatus(String id, String targetStatus) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.put('/superadmin/coupons/$id/status', data: {'status': targetStatus});
+      if (res.statusCode == 200) {
+        _showSnackBar('Coupon status toggled to $targetStatus.', Colors.green);
+        _fetchCoupons();
+      }
+    } catch (e) {
+      _showSnackBar('Status toggle failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _deleteCoupon(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.delete('/superadmin/coupons/$id');
+      if (res.statusCode == 200) {
+        _showSnackBar('Coupon deleted successfully.', Colors.green);
+        _fetchCoupons();
+      }
+    } catch (e) {
+      _showSnackBar('Delete failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showReadReceiptsDialog(List<dynamic> receipts) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Broadcast Read receipts'),
+        content: SizedBox(
+          width: 450,
+          height: 350,
+          child: receipts.isEmpty
+              ? const Center(child: Text("No read receipts received yet."))
+              : ListView.builder(
+                  itemCount: receipts.length,
+                  itemBuilder: (context, index) {
+                    final rec = receipts[index];
+                    final adminId = rec['adminId'] as Map?;
+                    final readTimeStr = rec['readAt'] != null
+                        ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(rec['readAt'].toString()))
+                        : 'N/A';
+                    return ListTile(
+                      title: Text(adminId != null ? adminId['name']?.toString() ?? 'N/A' : 'System Admin'),
+                      subtitle: Text(adminId != null ? adminId['companyName']?.toString() ?? 'N/A' : 'Platform Owner'),
+                      trailing: Text(readTimeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _cancelAnnouncement(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.delete('/superadmin/announcements/$id');
+      if (res.statusCode == 200) {
+        _showSnackBar('Announcement successfully cancelled!', Colors.green);
+        _fetchAnnouncements();
+      }
+    } catch (e) {
+      _showSnackBar('Cancellation failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showInviteTeamMemberDialog() {
+    _teamNameController.clear();
+    _teamEmailController.clear();
+    _teamPassController.clear();
+    _teamSubRole = 'Support';
+    _team2FA = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Invite Super Admin Team Member'),
+          content: Form(
+            key: _teamFormKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _teamNameController,
+                  decoration: const InputDecoration(labelText: 'Name*', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _teamEmailController,
+                  decoration: const InputDecoration(labelText: 'Email Address*', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _teamPassController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Security Password*', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.length < 8 ? 'Password min length 8' : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _teamSubRole,
+                  decoration: const InputDecoration(labelText: 'System Sub Role', border: OutlineInputBorder()),
+                  items: ['Owner', 'Billing', 'Support', 'Analytics', 'Content'].map((r) {
+                    return DropdownMenuItem(value: r, child: Text(r));
+                  }).toList(),
+                  onChanged: (v) => setModalState(() => _teamSubRole = v!),
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  title: const Text('Enforce MFA/2FA'),
+                  value: _team2FA,
+                  onChanged: (v) => setModalState(() => _team2FA = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_teamFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final res = await _api.post('/super-admin/team/add', data: {
+                    'name': _teamNameController.text.trim(),
+                    'email': _teamEmailController.text.trim().toLowerCase(),
+                    'password': _teamPassController.text.trim(),
+                    'subRole': _teamSubRole,
+                    'twoFactorEnabled': _team2FA,
+                  });
+                  if (res.statusCode == 201) {
+                    _showSnackBar('Team member onboarding invited successfully!', Colors.green);
+                    _fetchTeamMembers();
+                  }
+                } catch (e) {
+                  _showSnackBar('Onboarding invite failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Invite'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditTeamMemberDialog(dynamic member) {
+    _teamNameController.text = member['name']?.toString() ?? '';
+    _teamEmailController.text = member['email']?.toString() ?? '';
+    _teamPassController.clear();
+    _teamSubRole = member['subRole']?.toString() ?? 'Support';
+    _team2FA = member['twoFactorEnabled'] == true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Modify Super Admin Team Profile'),
+          content: Form(
+            key: _teamFormKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _teamNameController,
+                  decoration: const InputDecoration(labelText: 'Name*', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _teamEmailController,
+                  decoration: const InputDecoration(labelText: 'Email Address*', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _teamPassController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'New Password (Leave blank to keep current)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _teamSubRole,
+                  decoration: const InputDecoration(labelText: 'System Sub Role', border: OutlineInputBorder()),
+                  items: ['Owner', 'Billing', 'Support', 'Analytics', 'Content'].map((r) {
+                    return DropdownMenuItem(value: r, child: Text(r));
+                  }).toList(),
+                  onChanged: (v) => setModalState(() => _teamSubRole = v!),
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  title: const Text('Enforce MFA/2FA'),
+                  value: _team2FA,
+                  onChanged: (v) => setModalState(() => _team2FA = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_teamFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final body = <String, dynamic>{
+                    'name': _teamNameController.text.trim(),
+                    'email': _teamEmailController.text.trim().toLowerCase(),
+                    'subRole': _teamSubRole,
+                    'twoFactorEnabled': _team2FA,
+                  };
+                  if (_teamPassController.text.trim().isNotEmpty) {
+                    body['password'] = _teamPassController.text.trim();
+                  }
+
+                  final res = await _api.put('/super-admin/team/update/${member['_id']}', data: body);
+                  if (res.statusCode == 200) {
+                    _showSnackBar('Team profile updated successfully!', Colors.green);
+                    _fetchTeamMembers();
+                  }
+                } catch (e) {
+                  _showSnackBar('Profile update failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteTeamMember(String id) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⚠️ Revoke Member Authority?'),
+        content: const Text('Are you sure you want to remove this super administrator team member?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                final res = await _api.delete('/super-admin/team/delete/$id');
+                if (res.statusCode == 200) {
+                  _showSnackBar('Authority revoked and member removed successfully!', Colors.green);
+                  _fetchTeamMembers();
+                }
+              } catch (e) {
+                _showSnackBar('Removal failed: $e', Colors.redAccent);
+              } finally {
+                setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _viewTeamMemberLogs(dynamic member) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.get('/super-admin/team/logs/${member['_id']}');
+      if (res.statusCode == 200) {
+        final logs = res.data['data']['activityLogs'] as List? ?? [];
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Activity logs for ${member['name']}'),
+            content: SizedBox(
+              width: 500,
+              height: 400,
+              child: logs.isEmpty
+                  ? const Center(child: Text('No activity logs found for this member.'))
+                  : ListView.builder(
+                      itemCount: logs.length,
+                      itemBuilder: (context, index) {
+                        final log = logs[index];
+                        final rawTime = log['timestamp']?.toString() ?? '';
+                        String timeStr = 'N/A';
+                        if (rawTime.isNotEmpty) {
+                          try {
+                            timeStr = DateFormat('dd MMM, hh:mm a').format(DateTime.parse(rawTime));
+                          } catch (_) {}
+                        }
+                        return ListTile(
+                          title: Text(log['action']?.toString() ?? 'N/A'),
+                          subtitle: Text('Module: ${log['module'] ?? "N/A"}'),
+                          trailing: Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      _showSnackBar('Failed to load logs: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Master Data Helpers
+  void _showCreateMasterDataDialog() {
+    _masterDataNameController.clear();
+    _masterDataDescController.clear();
+    _masterDataCodeController.clear();
+    _masterDataCapacityController.clear();
+    _masterDataQuotaController.clear();
+    _masterDataGratuityController.clear();
+    _masterDataGradeController.clear();
+    _masterDataLevelController.clear();
+    _masterDataHolidayDate = null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: Text('Add $_activeMasterDataCategory Template'),
+          content: Form(
+            key: _masterDataFormKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _masterDataNameController,
+                    decoration: const InputDecoration(labelText: 'Template Name*', border: OutlineInputBorder()),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _masterDataDescController,
+                    decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_activeMasterDataCategory == 'LeaveType') ...[
+                    TextFormField(
+                      controller: _masterDataQuotaController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Annual Leave Quota (Days)*', border: OutlineInputBorder()),
+                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                    ),
+                  ],
+                  if (_activeMasterDataCategory == 'Department') ...[
+                    TextFormField(
+                      controller: _masterDataCodeController,
+                      decoration: const InputDecoration(labelText: 'Dept Code', border: OutlineInputBorder()),
+                    ),
+                  ],
+                  if (_activeMasterDataCategory == 'Holiday') ...[
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (d != null) {
+                          setModalState(() => _masterDataHolidayDate = d);
+                        }
+                      },
+                      icon: const Icon(Icons.date_range_rounded),
+                      label: Text(_masterDataHolidayDate == null
+                          ? 'Select Holiday Date'
+                          : DateFormat('dd MMM yyyy').format(_masterDataHolidayDate!)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_masterDataFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final data = <String, dynamic>{
+                    'category': _activeMasterDataCategory,
+                    'name': _masterDataNameController.text.trim(),
+                    'description': _masterDataDescController.text.trim(),
+                    'isActive': true,
+                  };
+
+                  if (_activeMasterDataCategory == 'LeaveType') {
+                    data['annualQuota'] = int.tryParse(_masterDataQuotaController.text) ?? 12;
+                  }
+                  if (_activeMasterDataCategory == 'Department') {
+                    data['code'] = _masterDataCodeController.text.trim();
+                  }
+                  if (_activeMasterDataCategory == 'Holiday' && _masterDataHolidayDate != null) {
+                    data['holidayDate'] = _masterDataHolidayDate!.toIso8601String();
+                  }
+
+                  final res = await _api.post('/master-data', data: data);
+                  if (res.statusCode == 201) {
+                    _showSnackBar('Template registered successfully!', Colors.green);
+                    _fetchMasterData();
+                  }
+                } catch (e) {
+                  _showSnackBar('Registration failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditMasterDataDialog(dynamic item) {
+    _masterDataNameController.text = item['name']?.toString() ?? '';
+    _masterDataDescController.text = item['description']?.toString() ?? '';
+    _masterDataCodeController.text = item['code']?.toString() ?? '';
+    _masterDataQuotaController.text = (item['annualQuota'] ?? 12).toString();
+    _masterDataHolidayDate = item['holidayDate'] != null ? DateTime.parse(item['holidayDate'].toString()) : null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: Text('Edit $_activeMasterDataCategory Template'),
+          content: Form(
+            key: _masterDataFormKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _masterDataNameController,
+                    decoration: const InputDecoration(labelText: 'Template Name*', border: OutlineInputBorder()),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _masterDataDescController,
+                    decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_activeMasterDataCategory == 'LeaveType') ...[
+                    TextFormField(
+                      controller: _masterDataQuotaController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Annual Leave Quota (Days)*', border: OutlineInputBorder()),
+                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                    ),
+                  ],
+                  if (_activeMasterDataCategory == 'Department') ...[
+                    TextFormField(
+                      controller: _masterDataCodeController,
+                      decoration: const InputDecoration(labelText: 'Dept Code', border: OutlineInputBorder()),
+                    ),
+                  ],
+                  if (_activeMasterDataCategory == 'Holiday') ...[
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: _masterDataHolidayDate ?? DateTime.now(),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (d != null) {
+                          setModalState(() => _masterDataHolidayDate = d);
+                        }
+                      },
+                      icon: const Icon(Icons.date_range_rounded),
+                      label: Text(_masterDataHolidayDate == null
+                          ? 'Select Holiday Date'
+                          : DateFormat('dd MMM yyyy').format(_masterDataHolidayDate!)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_masterDataFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final data = <String, dynamic>{
+                    'name': _masterDataNameController.text.trim(),
+                    'description': _masterDataDescController.text.trim(),
+                  };
+
+                  if (_activeMasterDataCategory == 'LeaveType') {
+                    data['annualQuota'] = int.tryParse(_masterDataQuotaController.text) ?? 12;
+                  }
+                  if (_activeMasterDataCategory == 'Department') {
+                    data['code'] = _masterDataCodeController.text.trim();
+                  }
+                  if (_activeMasterDataCategory == 'Holiday' && _masterDataHolidayDate != null) {
+                    data['holidayDate'] = _masterDataHolidayDate!.toIso8601String();
+                  }
+
+                  final res = await _api.put('/master-data/${item['_id']}', data: data);
+                  if (res.statusCode == 200) {
+                    _showSnackBar('Template updated successfully!', Colors.green);
+                    _fetchMasterData();
+                  }
+                } catch (e) {
+                  _showSnackBar('Update failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteMasterData(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.delete('/master-data/$id');
+      if (res.statusCode == 200) {
+        _showSnackBar('Template deleted successfully.', Colors.green);
+        _fetchMasterData();
+      }
+    } catch (e) {
+      _showSnackBar('Delete failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // RBAC Role Helpers
+  void _showCreateRoleDialog() {
+    _roleNameController.clear();
+    _roleDescController.clear();
+    _roleScope = 'Global';
+    _roleCompanyId = null;
+    _roleSubRoleCategory = 'Standard';
+    _rolePermissions = {
+      'attendance': true,
+      'leave': true,
+      'payroll': true,
+      'performance': false,
+      'recruitment': false,
+      'training': true,
+      'asset': true,
+      'expense': true,
+      'document': true,
+      'chat': true,
+      'announcements': true,
+    };
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Create Global RBAC Role'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _roleFormKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _roleNameController,
+                    decoration: const InputDecoration(labelText: 'Role Name*', border: OutlineInputBorder()),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _roleDescController,
+                    decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _roleScope,
+                    decoration: const InputDecoration(labelText: 'Authority Scope', border: OutlineInputBorder()),
+                    items: ['Global', 'Company'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (v) => setModalState(() => _roleScope = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_roleScope == 'Company') ...[
+                    DropdownButtonFormField<String>(
+                      value: _roleCompanyId,
+                      decoration: const InputDecoration(labelText: 'Assign to Company', border: OutlineInputBorder()),
+                      items: _companies.map((c) {
+                        return DropdownMenuItem<String>(value: c['_id']?.toString(), child: Text(c['companyName']?.toString() ?? 'N/A'));
+                      }).toList(),
+                      onChanged: (v) => setModalState(() => _roleCompanyId = v),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Module Access Permissions Config', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._rolePermissions.keys.map((permKey) {
+                    final label = permKey[0].toUpperCase() + permKey.substring(1);
+                    return CheckboxListTile(
+                      title: Text(label),
+                      value: _rolePermissions[permKey],
+                      onChanged: (v) => setModalState(() => _rolePermissions[permKey] = v!),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_roleFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final List<String> selectedPermissions = [];
+                  _rolePermissions.forEach((key, val) {
+                    if (val == true) selectedPermissions.add(key);
+                  });
+                  final res = await _api.post('/rbac/roles', data: {
+                    'roleName': _roleNameController.text.trim(),
+                    'scope': _roleScope,
+                    'companyId': _roleScope == 'Global' ? null : _roleCompanyId,
+                    'permissions': selectedPermissions,
+                    'subRoleCategory': _roleSubRoleCategory,
+                  });
+                  if (res.statusCode == 201) {
+                    _showSnackBar('RBAC Role generated successfully!', Colors.green);
+                    _fetchRolesData();
+                  }
+                } catch (e) {
+                  _showSnackBar('Role creation failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditRoleDialog(dynamic role) {
+    _roleNameController.text = role['roleName']?.toString() ?? '';
+    _roleDescController.text = role['description']?.toString() ?? '';
+    _roleScope = role['scope']?.toString() ?? 'Global';
+    _roleCompanyId = role['companyId']?.toString();
+    _roleSubRoleCategory = role['subRoleCategory']?.toString() ?? 'Standard';
+    
+    final List? perms = role['permissions'] as List?;
+    _rolePermissions = {
+      'attendance': perms?.contains('attendance') == true,
+      'leave': perms?.contains('leave') == true,
+      'payroll': perms?.contains('payroll') == true,
+      'performance': perms?.contains('performance') == true,
+      'recruitment': perms?.contains('recruitment') == true,
+      'training': perms?.contains('training') == true,
+      'asset': perms?.contains('asset') == true,
+      'expense': perms?.contains('expense') == true,
+      'document': perms?.contains('document') == true,
+      'chat': perms?.contains('chat') == true,
+      'announcements': perms?.contains('announcements') == true,
+    };
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: const Text('Modify Global RBAC Role'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _roleFormKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _roleNameController,
+                    decoration: const InputDecoration(labelText: 'Role Name*', border: OutlineInputBorder()),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _roleDescController,
+                    decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _roleScope,
+                    decoration: const InputDecoration(labelText: 'Authority Scope', border: OutlineInputBorder()),
+                    items: ['Global', 'Company'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (v) => setModalState(() => _roleScope = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_roleScope == 'Company') ...[
+                    DropdownButtonFormField<String>(
+                      value: _roleCompanyId,
+                      decoration: const InputDecoration(labelText: 'Assign to Company', border: OutlineInputBorder()),
+                      items: _companies.map((c) {
+                        return DropdownMenuItem<String>(value: c['_id']?.toString(), child: Text(c['companyName']?.toString() ?? 'N/A'));
+                      }).toList(),
+                      onChanged: (v) => setModalState(() => _roleCompanyId = v),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Module Access Permissions Config', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._rolePermissions.keys.map((permKey) {
+                    final label = permKey[0].toUpperCase() + permKey.substring(1);
+                    return CheckboxListTile(
+                      title: Text(label),
+                      value: _rolePermissions[permKey],
+                      onChanged: (v) => setModalState(() => _rolePermissions[permKey] = v!),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_roleFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final List<String> selectedPermissions = [];
+                  _rolePermissions.forEach((key, val) {
+                    if (val == true) selectedPermissions.add(key);
+                  });
+                  final res = await _api.put('/rbac/roles/${role['_id']}', data: {
+                    'roleName': _roleNameController.text.trim(),
+                    'scope': _roleScope,
+                    'companyId': _roleScope == 'Global' ? null : _roleCompanyId,
+                    'permissions': selectedPermissions,
+                    'subRoleCategory': _roleSubRoleCategory,
+                  });
+                  if (res.statusCode == 200) {
+                    _showSnackBar('RBAC Role updated successfully!', Colors.green);
+                    _fetchRolesData();
+                  }
+                } catch (e) {
+                  _showSnackBar('Role update failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cloneRole(dynamic role) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.post('/rbac/roles/${role['_id']}/clone', data: {
+        'newRoleName': '${role['roleName']} (Cloned)',
+        'targetCompanyId': role['companyId'],
+      });
+      if (res.statusCode == 201) {
+        _showSnackBar('Role cloned successfully!', Colors.green);
+        _fetchRolesData();
+      }
+    } catch (e) {
+      _showSnackBar('Role clone failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _deleteRole(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _api.delete('/rbac/roles/$id');
+      if (res.statusCode == 200) {
+        _showSnackBar('Role deleted successfully.', Colors.green);
+        _fetchRolesData();
+      }
+    } catch (e) {
+      _showSnackBar('Delete failed: $e', Colors.redAccent);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Reports Scheduler Dialog
+  void _showScheduleReportDialog() {
+    _scheduleRecipientsController.clear();
+    _scheduleFrequency = 'daily';
+    _scheduleFormat = 'CSV';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: Text('Schedule ${_selectedReportType.toUpperCase()} Auto-Report'),
+          content: Form(
+            key: _scheduleFormKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _scheduleRecipientsController,
+                  decoration: const InputDecoration(labelText: 'Recipients Email (comma-separated)', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _scheduleFrequency,
+                  decoration: const InputDecoration(labelText: 'Report Frequency', border: OutlineInputBorder()),
+                  items: ['daily', 'weekly', 'monthly'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                  onChanged: (v) => setModalState(() => _scheduleFrequency = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _scheduleFormat,
+                  decoration: const InputDecoration(labelText: 'Document Format', border: OutlineInputBorder()),
+                  items: ['CSV', 'Excel', 'PDF'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                  onChanged: (v) => setModalState(() => _scheduleFormat = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!_scheduleFormKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final res = await _api.post('/reports/platform-metrics/schedule', data: {
+                    'reportType': _selectedReportType,
+                    'frequency': _scheduleFrequency,
+                    'recipients': _scheduleRecipientsController.text.trim(),
+                    'format': _scheduleFormat,
+                  });
+                  if (res.statusCode == 201) {
+                    _showSnackBar('Automated report schedule created successfully!', Colors.green);
+                  }
+                } catch (e) {
+                  _showSnackBar('Schedule failed: $e', Colors.redAccent);
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('Schedule'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Downloader utilities for Exports
+  Future<void> _exportCsv(String title, List<dynamic> data) async {
+    if (data.isEmpty) {
+      _showSnackBar("No data to export", Colors.amber);
+      return;
+    }
+    try {
+      final List<List<dynamic>> rows = [];
+      final Map<String, dynamic> firstRow = data.first;
+      final headers = firstRow.keys.toList();
+      rows.add(headers);
+
+      for (var row in data) {
+        rows.add(headers.map((h) => row[h]).toList());
+      }
+
+      final csvContent = const ListToCsvConverter().convert(rows);
+      final bytes = utf8.encode(csvContent);
+      final filename = '${title.toLowerCase().replaceAll(' ', '_')}_report.csv';
+      await downloadFileBytes(bytes, filename, 'text/csv');
+      _showSnackBar("CSV exported successfully", Colors.green);
+    } catch (e) {
+      _showSnackBar("CSV export failed: $e", Colors.redAccent);
+    }
+  }
+
+  Future<void> _exportExcel(String title, List<dynamic> data) async {
+    if (data.isEmpty) {
+      _showSnackBar("No data to export", Colors.amber);
+      return;
+    }
+    try {
+      var excel = xl.Excel.createExcel();
+      var sheet = excel['Sheet1'];
+      final Map<String, dynamic> firstRow = data.first;
+      final headers = firstRow.keys.toList();
+      sheet.appendRow(headers.map((h) => xl.TextCellValue(h)).toList());
+
+      for (var row in data) {
+        sheet.appendRow(headers.map((h) => xl.TextCellValue(row[h]?.toString() ?? '')).toList());
+      }
+
+      final bytes = excel.save();
+      if (bytes != null) {
+        final filename = '${title.toLowerCase().replaceAll(' ', '_')}_report.xlsx';
+        await downloadFileBytes(bytes, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        _showSnackBar("Excel exported successfully", Colors.green);
+      }
+    } catch (e) {
+      _showSnackBar("Excel export failed: $e", Colors.redAccent);
+    }
+  }
+
+  Future<void> _exportPdf(String title, List<dynamic> data) async {
+    if (data.isEmpty) {
+      _showSnackBar("No data to export", Colors.amber);
+      return;
+    }
+    try {
+      final document = pdf.PdfDocument();
+      final page = document.pages.add();
+      final g = page.graphics;
+      
+      final titleFont = pdf.PdfStandardFont(pdf.PdfFontFamily.helvetica, 18, style: pdf.PdfFontStyle.bold);
+      final headerFont = pdf.PdfStandardFont(pdf.PdfFontFamily.helvetica, 10, style: pdf.PdfFontStyle.bold);
+      final textFont = pdf.PdfStandardFont(pdf.PdfFontFamily.helvetica, 9);
+
+      g.drawString(title, titleFont, bounds: const Rect.fromLTWH(0, 0, 500, 30));
+
+      final Map<String, dynamic> firstRow = data.first;
+      final headers = firstRow.keys.toList();
+      
+      double y = 45;
+      double colWidth = 500.0 / headers.length;
+      
+      for (int i = 0; i < headers.length; i++) {
+        g.drawString(headers[i], headerFont, bounds: Rect.fromLTWH(i * colWidth, y, colWidth, 18));
+      }
+      y += 20;
+
+      for (var row in data) {
+        if (y > 700) {
+          // simplified PDF paging stub
+        }
+        for (int i = 0; i < headers.length; i++) {
+          final val = row[headers[i]]?.toString() ?? '';
+          g.drawString(val, textFont, bounds: Rect.fromLTWH(i * colWidth, y, colWidth - 5, 14));
+        }
+        y += 16;
+      }
+
+      final bytes = await document.save();
+      document.dispose();
+
+      final filename = '${title.toLowerCase().replaceAll(' ', '_')}_report.pdf';
+      await downloadFileBytes(bytes, filename, 'application/pdf');
+      _showSnackBar("PDF exported successfully", Colors.green);
+    } catch (e) {
+      _showSnackBar("PDF export failed: $e", Colors.redAccent);
+    }
+  }
+
+  // ==========================================================
+  // GEOGRAPHIC BREAKDOWN CHART WIDGET
+  // ==========================================================
+  Widget _buildGeographicBreakdown() {
+    final geo = _analyticsData?['geographic'] as Map? ?? {};
+    if (geo.isEmpty) {
+      return const Text("No geographic distribution data available");
+    }
+    final entries = geo.entries.toList()
+      ..sort((a, b) {
+        final aCount = (a.value as Map)['count'] ?? 0;
+        final bCount = (b.value as Map)['count'] ?? 0;
+        return bCount.compareTo(aCount);
+      });
+    int total = entries.fold(0, (sum, item) => sum + ((item.value as Map)['count'] as int? ?? 0));
+    return Column(
+      children: entries.map((item) {
+        final count = (item.value as Map)['count'] ?? 0;
+        final double percent = total == 0 ? 0 : count / total;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(item.key.toString(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                  Text('$count workspaces (${(percent * 100).toInt()}%)', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: percent,
+                  minHeight: 8,
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                ),
+              )
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ==========================================================
+  // COUPON CODES SUB-TAB CONTENT
+  // ==========================================================
+  Widget _buildCouponsContent() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Discount Coupons Console', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                ElevatedButton.icon(
+                  onPressed: _showCreateCouponDialog,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add Coupon'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _coupons.isEmpty
+                  ? const Center(child: Text("No coupons found."))
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        horizontalMargin: 0,
+                        columnSpacing: 16,
+                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+                        columns: const [
+                          DataColumn(label: Padding(padding: EdgeInsets.only(left: 16), child: Text('Code', style: TextStyle(fontWeight: FontWeight.bold)))),
+                          DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Expiry', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Uses Limit', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _coupons.map<DataRow>((coupon) {
+                          final status = coupon['status']?.toString() ?? 'active';
+                          final isExpired = coupon['expiryDate'] != null && DateTime.parse(coupon['expiryDate'].toString()).isBefore(DateTime.now());
+                          final displayStatus = isExpired ? 'Expired' : status;
+                          final statusColor = displayStatus.toLowerCase() == 'active' ? Colors.green : Colors.red;
+                          
+                          return DataRow(
+                            cells: [
+                              DataCell(Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Text(coupon['code']?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
+                              )),
+                              DataCell(Text(coupon['discountType']?.toString() ?? 'Percentage')),
+                              DataCell(Text(coupon['discountValue']?.toString() ?? '0')),
+                              DataCell(Text(coupon['expiryDate'] != null
+                                  ? DateFormat('dd MMM yyyy').format(DateTime.parse(coupon['expiryDate'].toString()))
+                                  : 'Lifetime')),
+                              DataCell(Text('${coupon['usedCount'] ?? 0} / ${coupon['maxUses'] ?? "Unlimited"}')),
+                              DataCell(Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                child: Text(displayStatus, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                              )),
+                              DataCell(Row(
+                                children: [
+                                  IconButton(
+                                    icon: Icon(status == 'active' ? Icons.toggle_off_rounded : Icons.toggle_on_rounded, color: Colors.orange),
+                                    onPressed: () => _toggleCouponStatus(coupon['_id'], status == 'active' ? 'inactive' : 'active'),
+                                    tooltip: 'Toggle Status',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                                    onPressed: () => _deleteCoupon(coupon['_id']),
+                                    tooltip: 'Delete Coupon',
+                                  ),
+                                ],
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // BROADCAST HISTORY SUB-TAB CONTENT
+  // ==========================================================
+  Widget _buildBroadcastHistoryContent() {
+    return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Broadcast Transmission Logs & Read Receipts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _announcementsList.isEmpty
+                  ? const Center(child: Text("No broadcast history found."))
+                  : ListView.builder(
+                      itemCount: _announcementsList.length,
+                      itemBuilder: (context, index) {
+                        final item = _announcementsList[index];
+                        final isScheduled = item['status'] == 'Scheduled';
+                        final readCount = item['readCount'] ?? 0;
+                        final dateStr = item['sentAt'] != null
+                            ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(item['sentAt'].toString()))
+                            : (item['scheduledAt'] != null
+                                ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(item['scheduledAt'].toString()))
+                                : '');
+                        
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          color: const Color(0xFFF8FAFC),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE2E8F0))),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Text(item['title']?.toString() ?? 'No Title', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                          const SizedBox(width: 8),
+                                          if (isScheduled)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                              child: const Row(
+                                                children: [
+                                                  Icon(Icons.schedule_rounded, color: Colors.orange, size: 12),
+                                                  SizedBox(width: 4),
+                                                  Text('Scheduled', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(dateStr, style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(item['message']?.toString() ?? '', style: const TextStyle(color: Color(0xFF334155), fontSize: 13)),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Target Audience: ${item['targetAudience'] ?? "All"} • Priority: ${item['priority'] ?? "Normal"}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                    Row(
+                                      children: [
+                                        InkWell(
+                                          onTap: () => _showReadReceiptsDialog(item['readReceipts'] ?? []),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(12)),
+                                            child: Text('👁️ Read Receipts: $readCount', style: const TextStyle(color: Color(0xFF4F46E5), fontSize: 11, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                        if (isScheduled) ...[
+                                          const SizedBox(width: 12),
+                                          IconButton(
+                                            icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 18),
+                                            tooltip: 'Cancel Scheduled Broadcast',
+                                            onPressed: () => _cancelAnnouncement(item['_id']),
+                                          )
+                                        ]
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

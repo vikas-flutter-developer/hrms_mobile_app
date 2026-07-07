@@ -212,14 +212,16 @@ router.get('/status', verifyToken, async (req, res) => {
         todaysLogs.push({
           type: 'Check-In',
           time: record.checkIn,
-          source: record.checkInMethod
+          source: record.checkInMethod,
+          coordinates: record.checkInCoordinates || ''
         });
       }
       if (record.checkOut) {
         todaysLogs.push({
           type: 'Check-Out',
           time: record.checkOut,
-          source: record.checkOutMethod
+          source: record.checkOutMethod,
+          coordinates: record.checkOutCoordinates || ''
         });
       }
     }

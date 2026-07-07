@@ -92,9 +92,10 @@ router.post('/', verifyToken, upload.single('receipt'), async (req, res) => {
         });
       }
     }
+    const targetEmployeeId = employeeId || req.user.id;
     const expenseData = {
       company: req.user.company,
-      employeeId,
+      employeeId: targetEmployeeId,
       category,
       amount: numAmount,
       dateIncurred,

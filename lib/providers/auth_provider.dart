@@ -198,10 +198,72 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _apiService.put('/auth/change-password', data: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+      _isLoading = false;
+      notifyListeners();
+      return response.statusCode == 200;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = _parseError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateProfilePhoto(String base64Image) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _apiService.put('/employees/profile', data: {
+        'profilePhoto': base64Image,
+      });
+      _isLoading = false;
+      if (response.statusCode == 200) {
+        _currentUser = AppUser.fromJson(response.data);
+        notifyListeners();
+        return true;
+      }
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = _parseError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> registerAdmin(Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.post('/auth/register-admin', data: data);
+      _isLoading = false;
+      notifyListeners();
+      return response.statusCode == 201;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = _parseError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   String _parseError(dynamic e) {
     if (e is DioException) {
       if (e.response != null && e.response!.data is Map) {
-        return e.response!.data['message']?.toString() ?? 'Login failed. Please check credentials.';
+        return e.response!.data['message']?.toString() ?? 'Operation failed.';
       }
       return e.message ?? 'Network connection failure.';
     }

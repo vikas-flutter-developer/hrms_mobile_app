@@ -1925,6 +1925,19 @@ router.post('/announcements', contentProtector, async (req, res) => {
     }
 });
 
+// DELETE: Cancel/delete announcement
+router.delete('/announcements/:id', contentProtector, async (req, res) => {
+    try {
+        const result = await SuperAdminBroadcast.findByIdAndDelete(req.params.id);
+        if (!result) {
+            return res.status(404).json({ message: "Announcement not found!" });
+        }
+        res.status(200).json({ message: "Announcement deleted/cancelled successfully." });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to delete announcement", error: err.message });
+    }
+});
+
 // ==========================================
 // 🔧  POST: Super Admin Login
 // ==========================================
@@ -2338,6 +2351,35 @@ router.post('/companies/:id/toggle-autorenew', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, message: "Error toggling auto-renewal", error: err.message });
+    }
+});
+
+// 6. POST: Send Renewal Alert Notification
+router.post('/companies/:id/send-renewal-alert', async (req, res) => {
+    try {
+        const company = await Admin.findById(req.params.id);
+        if (!company) return res.status(404).json({ success: false, message: "Company not found!" });
+        
+        const SuperAdminBroadcast = require('../models/SuperAdminBroadcast');
+        const alert = new SuperAdminBroadcast({
+            title: "Urgent: Subscription Renewal Required",
+            message: `Dear ${company.name}, your subscription plan "${company.selectedPlanName}" is expiring on ${company.subscriptionExpiry ? new Date(company.subscriptionExpiry).toLocaleDateString() : 'N/A'}. Please renew it to avoid service interruption.`,
+            priority: "High",
+            targetAudience: "Company Admins",
+            selectedCompany: company._id,
+            channels: { email: true, sms: false, inApp: true },
+            status: "Sent",
+            sentAt: new Date(),
+            readReceipts: []
+        });
+        await alert.save();
+        
+        res.status(200).json({ 
+            success: true, 
+            message: `Renewal alert notification sent successfully to ${company.companyName} (${company.email})!` 
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Error sending renewal alert", error: err.message });
     }
 });
 

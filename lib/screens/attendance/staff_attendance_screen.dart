@@ -84,6 +84,13 @@ class _StaffAttendanceScreenState extends State<StaffAttendanceScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.payments_rounded, color: Color(0xFF2563EB)),
+            tooltip: 'Run Monthly Payroll',
+            onPressed: () => _runPayrollForSelectedMonth(context),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -289,6 +296,54 @@ class _StaffAttendanceScreenState extends State<StaffAttendanceScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _runPayrollForSelectedMonth(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Process Monthly Payroll'),
+          content: Text('Are you sure you want to run payroll calculations and issue payslips for all staff for "$_selectedMonth"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final hr = Provider.of<HrProvider>(context, listen: false);
+                  final success = await hr.runMonthlyPayroll(_selectedMonth);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(success 
+                            ? 'Payroll generated successfully for $_selectedMonth!' 
+                            : 'Failed to process payroll or already processed.'),
+                        backgroundColor: success ? Colors.green : Colors.redAccent,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                    );
+                  }
+                } finally {
+                  setState(() => _isLoading = false);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+              child: const Text('Run Payroll'),
+            ),
+          ],
+        );
+      },
     );
   }
 

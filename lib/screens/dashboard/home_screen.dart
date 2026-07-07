@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/hr_provider.dart';
+import '../../providers/manager_provider.dart';
 import '../superadmin/superadmin_dashboard.dart';
+import '../../services/socket_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +23,25 @@ class _HomeScreenState extends State<HomeScreen> {
       hr.fetchNotifications();
       hr.fetchAttendanceStatus();
       hr.fetchMyTeam();
+
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      
+      // Connect Socket.IO globally for push notifications
+      if (auth.currentUser != null) {
+        final socket = SocketService();
+        socket.connect(userId: auth.currentUser!.id);
+        socket.onNotificationReceived = (_) {
+          hr.fetchNotifications();
+        };
+      }
+      final user = auth.currentUser;
+      if (user != null && user.isManagerRole) {
+        final manager = Provider.of<ManagerProvider>(context, listen: false);
+        manager.fetchPendingLeaves();
+        manager.fetchPendingRegularizations();
+        manager.fetchPendingExpenses();
+        manager.fetchPendingLoans();
+      }
     });
   }
 
@@ -27,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final hr = Provider.of<HrProvider>(context);
+    final manager = Provider.of<ManagerProvider>(context);
     final user = auth.currentUser;
 
     if (user == null) {
@@ -50,6 +73,42 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_rounded, color: Color(0xFF0F172A)),
+                onPressed: () {
+                  Navigator.pushNamed(context, '/announcements');
+                },
+              ),
+              if (hr.notifications.isNotEmpty)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '${hr.notifications.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Color(0xFF0F172A)),
             onPressed: () async {
@@ -99,6 +158,12 @@ class _HomeScreenState extends State<HomeScreen> {
           await hr.fetchNotifications();
           await hr.fetchAttendanceStatus();
           await hr.fetchMyTeam();
+          if (user != null && user.isManagerRole) {
+            await manager.fetchPendingLeaves();
+            await manager.fetchPendingRegularizations();
+            await manager.fetchPendingExpenses();
+            await manager.fetchPendingLoans();
+          }
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -150,42 +215,82 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGreetingBanner(dynamic user) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)], // Vibrant Blue
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(context, '/profile');
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)], // Vibrant Blue
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF2563EB).withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        child: Row(
+          children: [
+            _buildUserAvatarWidget(user),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hello, ${user.name}!',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${user.positionLevel ?? 'Professional'} • ${user.department ?? 'General'}',
+                    style: const TextStyle(fontSize: 13, color: Color(0xFFBFDBFE)),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
+          ],
+        ),
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
+    );
+  }
+
+  Widget _buildUserAvatarWidget(dynamic user) {
+    if (user.profilePhoto != null && user.profilePhoto.toString().isNotEmpty) {
+      try {
+        final photoStr = user.profilePhoto.toString();
+        if (photoStr.startsWith('data:image')) {
+          final base64Data = photoStr.replaceFirst(RegExp(r'data:image/\w+;base64,'), '');
+          final decodedBytes = base64Decode(base64Data);
+          return CircleAvatar(
             radius: 30,
-            backgroundColor: Colors.white24,
-            child: Text(
-              user.name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hello, ${user.name}!',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${user.positionLevel ?? 'Professional'} • ${user.department ?? 'General'}',
-                  style: const TextStyle(fontSize: 13, color: Color(0xFFBFDBFE)),
-                ),
-              ],
-            ),
-          ),
-        ],
+            backgroundImage: MemoryImage(decodedBytes),
+          );
+        } else {
+          final photoUrl = photoStr.startsWith('http')
+              ? photoStr
+              : 'http://localhost:5000/uploads/$photoStr';
+          return CircleAvatar(
+            radius: 30,
+            backgroundImage: NetworkImage(photoUrl),
+          );
+        }
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return CircleAvatar(
+      radius: 30,
+      backgroundColor: Colors.white24,
+      child: Text(
+        user.name.substring(0, 1).toUpperCase(),
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
       ),
     );
   }
@@ -295,6 +400,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildManagerPanelButton(BuildContext context) {
+    final manager = Provider.of<ManagerProvider>(context);
+    final pendingCount = manager.pendingLeaves.length +
+        manager.pendingRegularizations.length +
+        manager.pendingExpenses.length +
+        manager.pendingLoans.length;
+
     return InkWell(
       onTap: () {
         Navigator.pushNamed(context, '/manager_dashboard');
@@ -317,23 +428,42 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF4F46E5)),
             ),
             const SizedBox(width: 16),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Manager Approval Console',
                     style: TextStyle(color: Color(0xFF1E1B4B), fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Resolve pending leaves, timesheets & reviews',
-                    style: TextStyle(color: Color(0xFF4F46E5), fontSize: 12),
+                    pendingCount > 0
+                        ? '$pendingCount pending approvals require your action'
+                        : 'Resolve pending leaves, timesheets & reviews',
+                    style: TextStyle(
+                      color: pendingCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF4F46E5),
+                      fontSize: 12,
+                      fontWeight: pendingCount > 0 ? FontWeight.bold : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF4F46E5), size: 16),
+            if (pendingCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$pendingCount',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              )
+            else
+              const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF4F46E5), size: 16),
           ],
         ),
       ),
@@ -361,6 +491,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _ActionItem(Icons.school_rounded, 'Training Hub', '/learning', Colors.orange[800]!),
       _ActionItem(Icons.rate_review_rounded, 'Appraisals', '/performance', Colors.pink[600]!),
       _ActionItem(Icons.group_rounded, 'Directory', '/directory', Colors.teal[700]!),
+      if (isAdminOrHr)
+        _ActionItem(Icons.work_history_rounded, 'Recruitment', '/recruitment', Colors.teal),
       _ActionItem(Icons.chat_bubble_rounded, 'Live Chat', '/chat', Colors.blue[700]!),
     ];
 

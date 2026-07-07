@@ -32,4 +32,27 @@ const notificationSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+notificationSchema.post('save', function (doc) {
+    try {
+        const NotificationModel = mongoose.model('Notification');
+        const io = NotificationModel.ioInstance;
+        if (io) {
+            const recipientRoom = doc.recipientId.toString();
+            io.to(recipientRoom).emit('newNotification', {
+                _id: doc._id,
+                recipientId: doc.recipientId,
+                title: doc.title,
+                message: doc.message,
+                link: doc.link,
+                createdAt: doc.createdAt
+            });
+            console.log(`🔔 [Socket]: Emitted newNotification to room ${recipientRoom}: "${doc.title}"`);
+        } else {
+            console.log("🔔 [Socket]: Cannot send push notification, Socket.io ioInstance not attached to Notification model.");
+        }
+    } catch (err) {
+        console.error("🔔 [Socket]: Notification push failed:", err.message);
+    }
+});
+
 module.exports = mongoose.model('Notification', notificationSchema);

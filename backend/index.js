@@ -20,6 +20,13 @@ const io = new Server(server, {
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
     }
 });
+app.set('io', io);
+try {
+    const Notification = require('./models/Notification');
+    Notification.ioInstance = io;
+} catch (e) {
+    console.warn("Notification model not yet registered when attaching socket:", e.message);
+}
 
 const PORT = process.env.PORT || 5000;
 const Employee = require('./models/Employee');
@@ -502,6 +509,14 @@ app.use((err, req, res, next) => {
 // ==========================================
 io.on('connection', (socket) => {
     console.log(`🔌 [Socket]: User connected: ${socket.id}`);
+
+    // Register user ID and place socket into room matching their user ID
+    socket.on('register', (userId) => {
+        if (userId) {
+            socket.join(userId.toString());
+            console.log(`🔌 [Socket]: Socket ${socket.id} registered and joined room/user ${userId}`);
+        }
+    });
 
     // Listen for new messages and broadcast to everyone
     socket.on('sendMessage', (data) => {

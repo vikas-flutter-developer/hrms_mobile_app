@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../providers/manager_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../config/constants.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -292,6 +296,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> with SingleTickerPr
                   'Description: ${exp['description']}',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
+                if (exp['hasReceipt'] == true) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => _viewReceiptImage(context, id),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 16, color: Color(0xFF2563EB)),
+                    label: const Text('View Receipt Image', style: TextStyle(color: Color(0xFF2563EB))),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFC7D2FE)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ],
                 const Divider(color: Color(0xFFE2E8F0), height: 24),
                 
                 Row(
@@ -388,6 +405,69 @@ class _ManagerDashboardState extends State<ManagerDashboard> with SingleTickerPr
                 ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _viewReceiptImage(BuildContext context, String expenseId) async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: AppConstants.tokenKey);
+    final imageUrl = '${AppConstants.apiBaseUrl}/expenses/$expenseId/receipt';
+    
+    if (!context.mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppBar(
+                title: const Text('Receipt Image', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16)),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+                automaticallyImplyLeading: false,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    imageUrl,
+                    headers: {
+                      if (token != null) 'Authorization': 'Bearer $token',
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Text('Failed to load receipt image.', style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

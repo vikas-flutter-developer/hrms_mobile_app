@@ -15,6 +15,7 @@ import 'screens/finances/payslips_screen.dart';
 import 'screens/finances/loans_screen.dart';
 import 'screens/expenses/expense_claim_screen.dart';
 import 'screens/profile/directory_screen.dart';
+import 'screens/profile/profile_screen.dart';
 import 'screens/helpdesk/helpdesk_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/manager/manager_dashboard.dart';
@@ -26,9 +27,13 @@ import 'screens/projects/projects_screen.dart';
 import 'screens/events/events_screen.dart';
 import 'screens/reports/reports_screen.dart';
 import 'screens/performance/performance_screen.dart';
+import 'screens/recruitment/recruitment_hub_screen.dart';
+import 'screens/auth/register_admin_screen.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().initialize();
   runApp(const HrmsApp());
 }
 
@@ -44,10 +49,11 @@ class HrmsApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ManagerProvider()),
       ],
       child: MaterialApp(
-        title: 'Enterprise HRMS',
+        title: 'HRMS Mobile App',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Slate 50
           fontFamily: 'Inter',
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF3B82F6), // Blue 500
@@ -90,6 +96,9 @@ class HrmsApp extends StatelessWidget {
           '/events': (context) => const EventsScreen(),
           '/reports': (context) => const ReportsScreen(),
           '/performance': (context) => const PerformanceScreen(),
+          '/profile': (context) => const ProfileScreen(),
+          '/recruitment': (context) => const RecruitmentHubScreen(),
+          '/register_admin': (context) => const RegisterAdminScreen(),
         },
       ),
     );

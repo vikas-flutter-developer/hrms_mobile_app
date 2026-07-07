@@ -99,12 +99,24 @@ class ApiService {
       for (var entry in files.entries) {
         formDataMap[entry.key] = await MultipartFile.fromFile(
           entry.value.path,
-          filename: entry.value.path.split('/').last,
+          filename: entry.value.path.replaceAll('\\', '/').split('/').last,
         );
       }
 
       final formData = FormData.fromMap(formDataMap);
       return await _dio.post(path, data: formData);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Helper to fetch raw binary bytes (useful for image downloads)
+  Future<Response> getBytes(String path) async {
+    try {
+      return await _dio.get(
+        path,
+        options: Options(responseType: ResponseType.bytes),
+      );
     } catch (e) {
       rethrow;
     }

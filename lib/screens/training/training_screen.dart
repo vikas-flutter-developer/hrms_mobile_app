@@ -1109,50 +1109,59 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
       return emp == myEmpId;
     }).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        title: const Text('Learning & Development', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
-        bottom: isAdminOrHr
-            ? TabBar(
-                controller: _tabController,
-                labelColor: const Color(0xFF0284C7),
-                unselectedLabelColor: const Color(0xFF64748B),
-                indicatorColor: const Color(0xFF0284C7),
-                tabs: const [
-                  Tab(text: 'Enrollment Roster'),
-                  Tab(text: 'Training Courses'),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('Learning & Development', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+          bottom: TabBar(
+            controller: isAdminOrHr ? _tabController : null,
+            labelColor: const Color(0xFF0284C7),
+            unselectedLabelColor: const Color(0xFF64748B),
+            indicatorColor: const Color(0xFF0284C7),
+            tabs: isAdminOrHr
+                ? const [
+                    Tab(text: 'Enrollment Roster'),
+                    Tab(text: 'Training Courses'),
+                  ]
+                : const [
+                    Tab(text: 'My Courses'),
+                    Tab(text: 'Discover Courses'),
+                  ],
+          ),
+        ),
+        body: TabBarView(
+          controller: isAdminOrHr ? _tabController : null,
+          children: isAdminOrHr
+              ? [
+                  _buildAdminRosterView(hr),
+                  _buildAdminCoursesView(hr),
+                ]
+              : [
+                  _buildTraineeView(myAssignments, auth.currentUser?.empId ?? ''),
+                  _buildDiscoverCoursesView(hr, myEmpId ?? ''),
                 ],
+        ),
+        floatingActionButton: isAdminOrHr
+            ? FloatingActionButton.extended(
+                onPressed: () {
+                  if (_tabController.index == 0) {
+                    _showAssignStaffModal(context);
+                  } else {
+                    _showCreateProgramModal(context);
+                  }
+                },
+                backgroundColor: const Color(0xFF0284C7),
+                icon: const Icon(Icons.add, color: Colors.white),
+                label: Text(_tabController.index == 0 ? 'Enroll Staff' : 'Add Course', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               )
             : null,
       ),
-      body: !isAdminOrHr
-          ? _buildTraineeView(myAssignments, auth.currentUser?.empId ?? '')
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildAdminRosterView(hr),
-                _buildAdminCoursesView(hr),
-              ],
-            ),
-      floatingActionButton: isAdminOrHr
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                if (_tabController.index == 0) {
-                  _showAssignStaffModal(context);
-                } else {
-                  _showCreateProgramModal(context);
-                }
-              },
-              backgroundColor: const Color(0xFF0284C7),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: Text(_tabController.index == 0 ? 'Enroll Staff' : 'Add Course', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            )
-          : null,
     );
   }
 
@@ -1452,6 +1461,107 @@ class _TrainingScreenState extends State<TrainingScreen> with SingleTickerProvid
                 Text('Host: $trainer • Mode: $mode', style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
                 const Divider(color: Color(0xFFE2E8F0), height: 20),
                 Text(desc, style: const TextStyle(color: Color(0xFF334155), fontSize: 13)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDiscoverCoursesView(HrProvider hr, String myUserId) {
+    final programs = hr.trainingPrograms.where((p) => p['status'] != 'Cancelled').toList();
+    if (programs.isEmpty) {
+      return const Center(
+        child: Text('No training courses available to discover.', style: TextStyle(color: Color(0xFF64748B))),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: programs.length,
+      itemBuilder: (context, index) {
+        final prog = programs[index];
+        final id = prog['_id']?.toString() ?? '';
+        final title = prog['title']?.toString() ?? 'Course Title';
+        final desc = prog['description']?.toString() ?? '';
+        final trainer = prog['trainer']?.toString() ?? 'Instructor';
+        final mode = prog['mode']?.toString() ?? 'Online';
+        final category = prog['category']?.toString() ?? 'Technical';
+
+        // Check if already enrolled
+        final isEnrolled = hr.trainingAssignments.any((a) {
+          final emp = a['employee'];
+          final empId = emp is Map ? emp['_id']?.toString() : emp?.toString();
+          final tp = a['trainingProgram'];
+          final progId = tp is Map ? tp['_id']?.toString() : tp?.toString();
+          return empId == myUserId && progId == id;
+        });
+
+        return Card(
+          elevation: 2,
+          color: Colors.white,
+          shadowColor: const Color(0x100F172A),
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(title, style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(mode, style: const TextStyle(color: Color(0xFF0284C7), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('Category: $category • Trainer: $trainer', style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                const SizedBox(height: 8),
+                Text(desc, style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
+                const Divider(color: Color(0xFFE2E8F0), height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: isEnrolled
+                      ? TextButton.icon(
+                          onPressed: null,
+                          icon: const Icon(Icons.check_circle_outline_rounded, size: 16, color: Colors.grey),
+                          label: const Text('Already Enrolled', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: () async {
+                            final success = await hr.assignEmployeeToTraining(
+                              employeeId: myUserId,
+                              programId: id,
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(success ? 'Enrolled in $title successfully!' : 'Failed to enroll.'),
+                                  backgroundColor: success ? Colors.green : Colors.redAccent,
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                          label: const Text('Self Enroll'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                ),
               ],
             ),
           ),

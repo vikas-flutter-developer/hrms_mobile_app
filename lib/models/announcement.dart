@@ -7,6 +7,8 @@ class AnnouncementModel {
   final String createdAt;
   final DateTime? expiresAt;
   final int? visibleForHours;
+  final bool isPinned;
+  final List<String> targetDepartments;
 
   AnnouncementModel({
     required this.id,
@@ -17,6 +19,8 @@ class AnnouncementModel {
     required this.createdAt,
     this.expiresAt,
     this.visibleForHours,
+    this.isPinned = false,
+    this.targetDepartments = const [],
   });
 
   bool get isExpired {
@@ -58,6 +62,10 @@ class AnnouncementModel {
       visibleForHours: json['visibleForHours'] != null
           ? int.tryParse(json['visibleForHours'].toString())
           : null,
+      isPinned: json['isPinned'] == true || json['isPinned'] == 'true',
+      targetDepartments: json['targetDepartments'] != null
+          ? List<String>.from((json['targetDepartments'] as List).map((x) => x.toString()))
+          : const [],
     );
   }
 }

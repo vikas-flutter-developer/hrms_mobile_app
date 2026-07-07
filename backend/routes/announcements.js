@@ -51,7 +51,8 @@ router.post('/', verifyToken, async (req, res) => {
       targetAudience,
       targetDepartments,
       targetUsers,
-      visibleForHours  // NEW: e.g. 24, 48, 72, 168, or null = permanent
+      visibleForHours,
+      isPinned
     } = req.body;
 
     const createdByModel = req.user.role === 'admin' ? 'Admin' : 'Employee';
@@ -71,7 +72,8 @@ router.post('/', verifyToken, async (req, res) => {
       createdBy: req.user.id,
       createdByModel,
       visibleForHours: visibleForHours || null,
-      expiresAt
+      expiresAt,
+      isPinned: isPinned === true || isPinned === 'true'
     });
 
     const savedAnnouncement = await newAnnouncement.save();
@@ -82,10 +84,9 @@ router.post('/', verifyToken, async (req, res) => {
   }
 });
 
-// UPDATE announcement
 router.put('/:id', verifyToken, async (req, res) => {
   try {
-    const { title, message, targetAudience, targetDepartments, targetUsers, visibleForHours } = req.body;
+    const { title, message, targetAudience, targetDepartments, targetUsers, visibleForHours, isPinned } = req.body;
     let expiresAt = undefined;
     if (visibleForHours !== undefined) {
       if (visibleForHours && !isNaN(Number(visibleForHours))) {
@@ -102,6 +103,10 @@ router.put('/:id', verifyToken, async (req, res) => {
       targetDepartments: Array.isArray(targetDepartments) ? targetDepartments : [],
       targetUsers: Array.isArray(targetUsers) ? targetUsers : [],
     };
+
+    if (isPinned !== undefined) {
+      updateData.isPinned = isPinned === true || isPinned === 'true';
+    }
 
     if (visibleForHours !== undefined) {
       updateData.visibleForHours = visibleForHours || null;

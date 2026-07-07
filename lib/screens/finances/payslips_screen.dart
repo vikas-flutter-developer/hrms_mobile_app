@@ -32,6 +32,38 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
     });
   }
 
+  double _calculateYTDEarnings(Payslip targetSlip, List<Payslip> allSlips) {
+    final parts = targetSlip.month.split(' ');
+    if (parts.length != 2) return targetSlip.netPay;
+    final targetMonthName = parts[0];
+    final targetYear = int.tryParse(parts[1]) ?? 0;
+    if (targetYear == 0) return targetSlip.netPay;
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final targetMonthIndex = monthNames.indexOf(targetMonthName);
+    if (targetMonthIndex == -1) return targetSlip.netPay;
+
+    double ytdSum = 0;
+    for (final slip in allSlips) {
+      final sParts = slip.month.split(' ');
+      if (sParts.length != 2) continue;
+      final sMonthName = sParts[0];
+      final sYear = int.tryParse(sParts[1]) ?? 0;
+      if (sYear != targetYear) continue;
+
+      final sMonthIndex = monthNames.indexOf(sMonthName);
+      if (sMonthIndex == -1) continue;
+
+      if (sMonthIndex <= targetMonthIndex) {
+        ytdSum += slip.netPay;
+      }
+    }
+    return ytdSum;
+  }
+
   // ==========================================
   // 📄 CORPORATE PDF PAYSLIP GENERATOR
   // ==========================================
@@ -173,15 +205,21 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
 
     y += 65;
 
+    final hr = Provider.of<HrProvider>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final payslips = (auth.currentUser?.role == 'admin' || auth.currentUser?.role == 'hr') ? hr.staffPayslips : hr.myPayslips;
+    final ytdEarnings = _calculateYTDEarnings(payslip, payslips);
+
     // 5. Digital Seal / Footer Note
     g.drawString('Payment Status: ${payslip.status.toUpperCase()}', boldFont, bounds: Rect.fromLTWH(0, y, 300, 16));
     g.drawString('Disbursement Date: ${payslip.paymentDate ?? "Current Cycle"}', standardFont, bounds: Rect.fromLTWH(0, y + 16, 300, 16));
+    g.drawString('YTD Earnings (Year-to-Date): INR ${ytdEarnings.toStringAsFixed(2)}', boldFont, bounds: Rect.fromLTWH(0, y + 32, 300, 16));
 
     g.drawString(
       'This is an authentic computer-generated document issued by Enterprise HRMS System.',
       PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.italic),
       brush: PdfSolidBrush(PdfColor(100, 116, 139)),
-      bounds: Rect.fromLTWH(0, y + 40, 500, 16),
+      bounds: Rect.fromLTWH(0, y + 56, 500, 16),
     );
 
     final bytes = await document.save();
@@ -241,6 +279,11 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
   // 🖼️ PAYSLIP FORMAT PREVIEW MODAL
   // ==========================================
   void _showFormatPreviewModal(BuildContext context, Payslip payslip) {
+    final hr = Provider.of<HrProvider>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final payslips = (auth.currentUser?.role == 'admin' || auth.currentUser?.role == 'hr') ? hr.staffPayslips : hr.myPayslips;
+    final ytdEarnings = _calculateYTDEarnings(payslip, payslips);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -386,18 +429,30 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Net Take Home Banner
+                        // YTD & Net Take Home Banner
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           decoration: BoxDecoration(
                             color: const Color(0xFF10B981),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
                             children: [
-                              const Text('NET TAKE HOME SALARY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                              Text('₹ ${payslip.netPay.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('YTD EARNINGS (Year-to-Date)', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
+                                  Text('₹ ${ytdEarnings.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('NET TAKE HOME SALARY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('₹ ${payslip.netPay.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -453,7 +508,7 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
     );
   }
 
-  void _showDetails(Payslip payslip) {
+  void _showDetails(Payslip payslip, List<Payslip> payslips) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -517,8 +572,20 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
               if (payslip.lopDeduction > 0) _buildRow('Loss of Pay (LOP)', payslip.lopDeduction),
               if (payslip.loanEmi > 0) _buildRow('EMI Loan repayment', payslip.loanEmi),
 
-              const Divider(color: Color(0xFFE2E8F0), height: 24),
-              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'YTD EARNINGS (Year-to-Date)',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '₹ ${_calculateYTDEarnings(payslip, payslips).toStringAsFixed(1)}',
+                    style: const TextStyle(color: Color(0xFF475569), fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -691,7 +758,7 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
                             const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF64748B), size: 14),
                           ],
                         ),
-                        onTap: () => _showDetails(slip),
+                        onTap: () => _showDetails(slip, payslips),
                       ),
                     );
                   },

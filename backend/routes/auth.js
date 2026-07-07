@@ -1275,4 +1275,51 @@ router.get('/active-features', verifyToken, async (req, res) => {
     }
 });
 
+// PUT /change-password
+router.put('/change-password', verifyToken, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: "Current password and new password are required." });
+  }
+
+  try {
+    const role = req.user.role.toLowerCase();
+    let user = null;
+
+    if (role === 'superadmin') {
+      const Superadmin = require('../models/Superadmin');
+      user = await Superadmin.findById(req.user.id);
+    } else if (role === 'admin') {
+      const Admin = require('../models/Admin');
+      user = await Admin.findById(req.user.id);
+    } else {
+      const Employee = require('../models/Employee');
+      user = await Employee.findById(req.user.id);
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User account not found." });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Incorrect current password." });
+    }
+
+    const { validatePasswordPolicy } = require('../utils/passwordPolicy');
+    await validatePasswordPolicy(newPassword.trim());
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword.trim(), salt);
+
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully." });
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({ message: err.message || "Failed to update password." });
+  }
+});
+
 module.exports = router;

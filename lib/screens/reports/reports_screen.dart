@@ -10,6 +10,149 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
+  String _selectedPeriod = 'This Month'; // 'Today', 'This Week', 'This Month', 'Custom'
+  DateTimeRange? _selectedDateRange;
+
+  DateTimeRange _getDateTimeRangeForPeriod() {
+    final now = DateTime.now();
+    if (_selectedPeriod == 'Today') {
+      return DateTimeRange(
+        start: DateTime(now.year, now.month, now.day),
+        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      );
+    } else if (_selectedPeriod == 'This Week') {
+      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+      return DateTimeRange(
+        start: DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day),
+        end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      );
+    } else if (_selectedPeriod == 'This Month') {
+      return DateTimeRange(
+        start: DateTime(now.year, now.month, 1),
+        end: DateTime(now.year, now.month + 1, 0, 23, 59, 59),
+      );
+    } else {
+      return _selectedDateRange ?? DateTimeRange(
+        start: DateTime(now.year, now.month, 1),
+        end: DateTime(now.year, now.month + 1, 0, 23, 59, 59),
+      );
+    }
+  }
+
+  String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  Widget _buildDateFilterBar() {
+    final range = _getDateTimeRangeForPeriod();
+    final dateStr = "${range.start.day} ${_getMonthName(range.start.month)} - ${range.end.day} ${_getMonthName(range.end.month)} ${range.end.year}";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x050F172A),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Reporting Period',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+              ),
+              Text(
+                dateStr,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0284C7)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildFilterPill('Today'),
+              const SizedBox(width: 8),
+              _buildFilterPill('This Week'),
+              const SizedBox(width: 8),
+              _buildFilterPill('This Month'),
+              const SizedBox(width: 8),
+              _buildFilterPill('Custom'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPill(String period) {
+    final isSelected = _selectedPeriod == period;
+    return Expanded(
+      child: InkWell(
+        onTap: () async {
+          if (period == 'Custom') {
+            final picked = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              initialDateRange: _selectedDateRange ?? DateTimeRange(
+                start: DateTime.now().subtract(const Duration(days: 30)),
+                end: DateTime.now(),
+              ),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: Color(0xFF0284C7),
+                      onPrimary: Colors.white,
+                      onSurface: Color(0xFF0F172A),
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              setState(() {
+                _selectedPeriod = period;
+                _selectedDateRange = picked;
+              });
+            }
+          } else {
+            setState(() {
+              _selectedPeriod = period;
+            });
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            period,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -302,6 +445,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final double salaryCost = (revenueVsSalary['salaryCost'] ?? 0).toDouble();
     final double pendingExpenses = (stats['pendingExpenseAmount'] ?? 0).toDouble();
 
+    final range = _getDateTimeRangeForPeriod();
+    
+    // Filter Joined list dynamically
+    final rawJoinedList = List<dynamic>.from(trends['joinedList'] ?? []);
+    final filteredJoinedList = rawJoinedList.where((emp) {
+      if (emp['joinDate'] == null) return false;
+      try {
+        final joinDate = DateTime.parse(emp['joinDate'].toString());
+        return joinDate.isAfter(range.start.subtract(const Duration(seconds: 1))) &&
+               joinDate.isBefore(range.end.add(const Duration(seconds: 1)));
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+
+    // Filter Exited list dynamically
+    final rawExitedList = List<dynamic>.from(trends['exitedList'] ?? []);
+    final filteredExitedList = rawExitedList.where((emp) {
+      if (emp['exitDate'] == null) return false;
+      try {
+        final exitDate = DateTime.parse(emp['exitDate'].toString());
+        return exitDate.isAfter(range.start.subtract(const Duration(seconds: 1))) &&
+               exitDate.isBefore(range.end.add(const Duration(seconds: 1)));
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
@@ -319,6 +490,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _buildDateFilterBar(),
               // Attendance Summary Section
               const Text('Daily Operations Summary', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
               const SizedBox(height: 8),
@@ -466,9 +638,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           borderRadius: BorderRadius.circular(12),
                           onTap: () => _showJoinedExitedBottomSheet(
                             context,
-                            title: 'Employees Joined This Month',
-                            subtitle: 'Staff members onboarded in current month',
-                            list: List<dynamic>.from(trends['joinedList'] ?? []),
+                            title: 'Employees Joined',
+                            subtitle: 'Staff members onboarded in selected range',
+                            list: filteredJoinedList,
                             accentColor: Colors.teal,
                           ),
                           child: Padding(
@@ -477,8 +649,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               children: [
                                 const Icon(Icons.group_add_rounded, color: Colors.teal, size: 28),
                                 const SizedBox(height: 4),
-                                Text('${trends['joined'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
-                                const Text('Joined This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                Text('${filteredJoinedList.length}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                                const Text('Joined', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
                               ],
                             ),
                           ),
@@ -490,9 +662,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           borderRadius: BorderRadius.circular(12),
                           onTap: () => _showJoinedExitedBottomSheet(
                             context,
-                            title: 'Employees Exited This Month',
-                            subtitle: 'Staff members offboarded in current month',
-                            list: List<dynamic>.from(trends['exitedList'] ?? []),
+                            title: 'Employees Exited',
+                            subtitle: 'Staff members offboarded in selected range',
+                            list: filteredExitedList,
                             accentColor: Colors.redAccent,
                             isExit: true,
                           ),
@@ -502,8 +674,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               children: [
                                 const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
                                 const SizedBox(height: 4),
-                                Text('${trends['exited'] ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                                const Text('Exited This Month', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                Text('${filteredExitedList.length}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                                const Text('Exited', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
                               ],
                             ),
                           ),

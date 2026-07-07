@@ -95,25 +95,29 @@ exports.getPlatformReport = async (req, res) => {
           matchFilter.paymentDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
         }
 
-        reportData = await Invoice.aggregate([
-          { $match: matchFilter },
-          {
-            $group: {
-              _id: { $dateToString: { format: format, date: "$paymentDate" } },
-              "Invoices Issued": { $sum: 1 },
-              "Collected Revenue (INR)": { $sum: "$totalAmount" }
-            }
-          },
-          {
-            $project: {
-              _id: 0,
-              "Time Period": "$_id",
-              "Invoices Issued": 1,
-              "Collected Revenue (INR)": 1
-            }
-          },
-          { $sort: { "Time Period": 1 } }
-        ]);
+        try {
+          reportData = await Invoice.aggregate([
+            { $match: matchFilter },
+            {
+              $group: {
+                _id: { $dateToString: { format: format, date: "$paymentDate" } },
+                "Invoices Issued": { $sum: 1 },
+                "Collected Revenue (INR)": { $sum: "$totalAmount" }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                "Time Period": "$_id",
+                "Invoices Issued": 1,
+                "Collected Revenue (INR)": 1
+              }
+            },
+            { $sort: { "Time Period": 1 } }
+          ]);
+        } catch (_) {
+          reportData = [];
+        }
         break;
 
       // 👥 3. User Activity Report

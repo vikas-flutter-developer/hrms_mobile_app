@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/leave.dart';
@@ -87,6 +88,7 @@ class HrProvider with ChangeNotifier {
   List<PerformanceReviewModel> _performanceReviews = [];
   List<dynamic> _trainingPrograms = [];
   List<dynamic> _trainingAssignments = [];
+  List<dynamic> _kpis = [];
 
   List<AnnouncementModel> get announcements => _announcements;
   List<ProjectModel> get projects => _projects;
@@ -97,6 +99,7 @@ class HrProvider with ChangeNotifier {
   List<PerformanceReviewModel> get performanceReviews => _performanceReviews;
   List<dynamic> get trainingPrograms => _trainingPrograms;
   List<dynamic> get trainingAssignments => _trainingAssignments;
+  List<dynamic> get kpis => _kpis;
 
   void _setLoading(bool value) {
     _isLoading = value;
@@ -130,14 +133,14 @@ class HrProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> checkIn(String coordinates) async {
+  Future<bool> checkIn(String coordinates, {String source = 'Mobile App'}) async {
     _setError(null);
     try {
-      final response = await _api.post('/attendance/mobile-check-in', data: {
+      final response = await _api.post('/attendance/clock-in', data: {
         'locationCoordinates': coordinates,
-        'deviceKey': 'mobile_hrms_app_secured_key',
+        'source': source,
       });
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         await fetchAttendanceStatus();
         return true;
       }
@@ -148,14 +151,14 @@ class HrProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> checkOut(String coordinates) async {
+  Future<bool> checkOut(String coordinates, {String source = 'Mobile App'}) async {
     _setError(null);
     try {
-      final response = await _api.post('/attendance/mobile-check-in', data: {
+      final response = await _api.post('/attendance/clock-out', data: {
         'locationCoordinates': coordinates,
-        'deviceKey': 'mobile_hrms_app_secured_key',
+        'source': source,
       });
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         await fetchAttendanceStatus();
         return true;
       }
@@ -558,6 +561,19 @@ class HrProvider with ChangeNotifier {
     }
   }
 
+  Future<Uint8List?> fetchReceiptBytes(String id) async {
+    try {
+      final response = await _api.getBytes('/expenses/$id/receipt');
+      if (response.statusCode == 200 && response.data != null) {
+        return Uint8List.fromList(response.data);
+      }
+      return null;
+    } catch (e) {
+      print('Fetch receipt bytes error: $e');
+      return null;
+    }
+  }
+
   // ==========================================
   // 💻 ASSETS & DAMAGED CONTROLS
   // ==========================================
@@ -777,9 +793,14 @@ class HrProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> sendGlobalMessage(String content) async {
+  Future<bool> sendGlobalMessage(String content, {String? attachmentUrl, String? attachmentType}) async {
     try {
-      final response = await _api.post('/messages/global', data: {'content': content});
+      final data = {
+        'content': content,
+        if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+        if (attachmentType != null) 'attachmentType': attachmentType,
+      };
+      final response = await _api.post('/messages/global', data: data);
       if (response.statusCode == 201) {
         await fetchGlobalMessages();
         return true;
@@ -788,6 +809,22 @@ class HrProvider with ChangeNotifier {
     } catch (e) {
       print('Send chat message error: $e');
       return false;
+    }
+  }
+
+  Future<String?> uploadChatFile(File file) async {
+    try {
+      final Map<String, File> filesMap = {
+        'file': file,
+      };
+      final response = await _api.uploadFiles('/messages/upload', filesMap);
+      if (response.statusCode == 200) {
+        return response.data['url']?.toString();
+      }
+      return null;
+    } catch (e) {
+      print('Upload chat file error: $e');
+      return null;
     }
   }
 
@@ -889,13 +926,14 @@ class HrProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> createAnnouncement(String title, String message, String audience, {int? visibleForHours}) async {
+  Future<bool> createAnnouncement(String title, String message, String audience, {int? visibleForHours, bool isPinned = false}) async {
     try {
       _setLoading(true);
       final data = {
         'title': title,
         'message': message,
         'targetAudience': audience,
+        'isPinned': isPinned,
       };
       if (visibleForHours != null) {
         data['visibleForHours'] = visibleForHours.toString();
@@ -920,6 +958,7 @@ class HrProvider with ChangeNotifier {
     required String message,
     required String audience,
     int? visibleForHours,
+    bool isPinned = false,
   }) async {
     try {
       _setLoading(true);
@@ -927,6 +966,7 @@ class HrProvider with ChangeNotifier {
         'title': title,
         'message': message,
         'targetAudience': audience,
+        'isPinned': isPinned,
       };
       if (visibleForHours != null) {
         data['visibleForHours'] = visibleForHours.toString();
@@ -1659,6 +1699,104 @@ class HrProvider with ChangeNotifier {
     } catch (e) {
       _setLoading(false);
       print('Offboard employee error: $e');
+      return false;
+    }
+  }
+
+  Future<void> fetchKPIs({bool mineOnly = false}) async {
+    try {
+      _setLoading(true);
+      final endpoint = mineOnly ? '/performance/my-kpis' : '/performance/kpis';
+      final response = await _api.get(endpoint);
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        _kpis = List<dynamic>.from(response.data ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      _setLoading(false);
+      print('Fetch KPIs error: $e');
+    }
+  }
+
+  Future<bool> createKPI({
+    required String title,
+    required String description,
+    required String? employeeId,
+    required String department,
+    required String unit,
+    required double targetValue,
+    required double baseline,
+    required double weight,
+    required String frequency,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.post('/performance/kpis', data: {
+        'title': title,
+        'description': description,
+        'employee': employeeId,
+        'department': department,
+        'unit': unit,
+        'targetValue': targetValue,
+        'baseline': baseline,
+        'weight': weight,
+        'frequency': frequency,
+      });
+      _setLoading(false);
+      if (response.statusCode == 201) {
+        await fetchKPIs(mineOnly: employeeId == null);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Create KPI error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateKPIProgress({
+    required String id,
+    required double currentValue,
+  }) async {
+    try {
+      _setLoading(true);
+      final response = await _api.put('/performance/kpis/$id', data: {
+        'currentValue': currentValue,
+      });
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        // Find index and update locally
+        final index = _kpis.indexWhere((k) => k['_id'] == id);
+        if (index != -1) {
+          _kpis[index] = response.data;
+          notifyListeners();
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Update KPI Progress error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteKPI(String id) async {
+    try {
+      _setLoading(true);
+      final response = await _api.delete('/performance/kpis/$id');
+      _setLoading(false);
+      if (response.statusCode == 200) {
+        _kpis.removeWhere((k) => k['_id'] == id);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _setLoading(false);
+      print('Delete KPI error: $e');
       return false;
     }
   }

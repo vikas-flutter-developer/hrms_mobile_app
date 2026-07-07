@@ -11,6 +11,7 @@ const AnnouncementSchema = new mongoose.Schema({
     targetRoles: [{ type: String }],
     createdBy: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'createdByModel' },
     createdByModel: { type: String, enum: ['Admin', 'Employee'], default: 'Admin' },
+    isPinned: { type: Boolean, default: false },
     expiresAt: { type: Date, default: null }, // null = never expires
     visibleForHours: { type: Number, default: null } // e.g. 24, 48, 72, 168 (7 days), null = permanent
 }, { timestamps: true });

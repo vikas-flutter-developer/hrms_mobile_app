@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/hr_provider.dart';
 import '../../services/socket_service.dart';
+import '../../config/constants.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -16,24 +19,58 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final List<Map<String, dynamic>> _liveSocketMessages = [];
+  bool _isUploading = false;
+  
+  File? _attachedImage;
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final hr = Provider.of<HrProvider>(context, listen: false);
-      hr.fetchGlobalMessages();
+      hr.fetchGlobalMessages().then((_) {
+        if (mounted) {
+          setState(() {
+            _liveSocketMessages.clear();
+          });
+        }
+      });
     });
 
-    _socketService.connect();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    _socketService.connect(userId: auth.currentUser?.id);
     _socketService.onMessageReceived = (msg) {
       if (mounted) {
-        setState(() {
-          _liveSocketMessages.add(msg);
-        });
-        _scrollToBottom();
+        final hr = Provider.of<HrProvider>(context, listen: false);
+        final existsInDb = hr.chatMessages.any((m) => m['_id'] == msg['_id']);
+        final existsInLive = _liveSocketMessages.any((m) => m['_id'] == msg['_id']);
+        if (!existsInDb && !existsInLive) {
+          setState(() {
+            _liveSocketMessages.add(msg);
+          });
+          _scrollToBottom();
+        }
       }
     };
+  }
+
+  Future<void> _pickAttachmentImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      );
+      if (image != null) {
+        setState(() {
+          _attachedImage = File(image.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking attachment: $e')),
+      );
+    }
   }
 
   @override
@@ -58,17 +95,48 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _attachedImage == null) return;
+    if (_isUploading) return;
 
-    final auth = Provider.of<AuthProvider>(context, listen: false);
     final hr = Provider.of<HrProvider>(context, listen: false);
-    final senderName = auth.currentUser?.name ?? 'Employee';
+    
+    String? attachmentUrl;
+    String? attachmentType;
+    if (_attachedImage != null) {
+      setState(() {
+        _isUploading = true;
+      });
+      // Perform actual file upload to server
+      final uploadedPath = await hr.uploadChatFile(_attachedImage!);
+      if (uploadedPath != null) {
+        final baseServerUrl = AppConstants.apiBaseUrl.replaceAll('/api', '');
+        attachmentUrl = '$baseServerUrl$uploadedPath';
+        attachmentType = 'image';
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to upload image attachment.')),
+          );
+        }
+        setState(() {
+          _isUploading = false;
+        });
+        return;
+      }
+    }
 
     _messageController.clear();
+    setState(() {
+      _attachedImage = null;
+      _isUploading = false;
+    });
 
-    // Broadcast via socket for real-time peers & save to MongoDB Atlas via REST
-    _socketService.sendMessage(senderName, text);
-    await hr.sendGlobalMessage(text);
+    // Save to database via REST endpoint. The server will broadcast to other connected clients.
+    await hr.sendGlobalMessage(
+      text.isNotEmpty ? text : 'Sent an image attachment',
+      attachmentUrl: attachmentUrl,
+      attachmentType: attachmentType,
+    );
     _scrollToBottom();
   }
 
@@ -167,6 +235,27 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                   ],
+                                  if (msg['attachmentUrl'] != null && msg['attachmentType'] == 'image') ...[
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        msg['attachmentUrl'].toString(),
+                                        width: 180,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return Container(
+                                            width: 180,
+                                            height: 120,
+                                            color: Colors.grey[200],
+                                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                  ],
                                   Text(
                                     content,
                                     style: TextStyle(color: isMe ? Colors.white : const Color(0xFF0F172A), fontSize: 13, height: 1.3),
@@ -179,6 +268,38 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
           ),
 
+          // Attachment Preview
+          if (_attachedImage != null) ...[
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(_attachedImage!, width: 48, height: 48, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Image attached', style: TextStyle(color: Color(0xFF64748B), fontSize: 13, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.cancel_rounded, color: Colors.grey),
+                      onPressed: () {
+                        setState(() {
+                          _attachedImage = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
           // Message Input Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -188,6 +309,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.attach_file_rounded, color: Color(0xFF64748B)),
+                  onPressed: _pickAttachmentImage,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _messageController,
@@ -200,10 +326,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFF0284C7)),
-                  onPressed: _sendMessage,
-                ),
+                _isUploading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0284C7)),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.send_rounded, color: Color(0xFF0284C7)),
+                        onPressed: _sendMessage,
+                      ),
               ],
             ),
           ),

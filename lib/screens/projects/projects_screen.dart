@@ -538,6 +538,24 @@ class _ProjectsScreenState extends State<ProjectsScreen> with SingleTickerProvid
                         itemCount: hr.projects.length,
                         itemBuilder: (context, index) {
                           final prj = hr.projects[index];
+                          
+                          // Calculate task progress for this project dynamically
+                          final prjTasks = hr.projectTasks.where((t) => t.projectId == prj.id || t.projectName == prj.name).toList();
+                          double progressPercentage = 0.0;
+                          if (prj.status.toLowerCase() == 'completed') {
+                            progressPercentage = 100.0;
+                          } else if (prjTasks.isNotEmpty) {
+                            final completedCount = prjTasks.where((t) => t.status.toLowerCase() == 'completed' || t.status.toLowerCase() == 'done').length;
+                            progressPercentage = (completedCount / prjTasks.length) * 100;
+                          } else {
+                            if (prj.status == 'In Progress' || prj.status == 'Review') {
+                              progressPercentage = 35.0;
+                            } else if (prj.status == 'On Hold') {
+                              progressPercentage = 15.0;
+                            } else {
+                              progressPercentage = 0.0;
+                            }
+                          }
 
                           return Card(
                             elevation: 2,
@@ -614,6 +632,24 @@ class _ProjectsScreenState extends State<ProjectsScreen> with SingleTickerProvid
                                   ),
                                   const Divider(color: Color(0xFFE2E8F0), height: 24),
                                   Text(prj.description, style: const TextStyle(color: Color(0xFF334155), fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Project Progress', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
+                                      Text('${progressPercentage.toStringAsFixed(0)}%', style: const TextStyle(color: Color(0xFF0284C7), fontSize: 12, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: progressPercentage / 100,
+                                      backgroundColor: const Color(0xFFE2E8F0),
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF0284C7)),
+                                      minHeight: 6,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),

@@ -62,6 +62,8 @@ class TaskModel {
   final String priority; // 'Low', 'Medium', 'High', 'Urgent'
   final String assignedToName;
   final String dueDate;
+  final String? projectId;
+  final String? projectName;
 
   TaskModel({
     required this.id,
@@ -71,12 +73,23 @@ class TaskModel {
     required this.priority,
     required this.assignedToName,
     required this.dueDate,
+    this.projectId,
+    this.projectName,
   });
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
     String aName = 'Unassigned';
     if (json['assignedTo'] is Map) {
       aName = json['assignedTo']['name']?.toString() ?? 'Unassigned';
+    }
+
+    String? pId;
+    String? pName;
+    if (json['project'] is Map) {
+      pId = json['project']['_id']?.toString();
+      pName = json['project']['title']?.toString() ?? json['project']['name']?.toString();
+    } else if (json['project'] != null) {
+      pId = json['project'].toString();
     }
 
     return TaskModel(
@@ -86,7 +99,9 @@ class TaskModel {
       status: json['status']?.toString() ?? 'To Do',
       priority: json['priority']?.toString() ?? 'Medium',
       assignedToName: aName,
-      dueDate: json['dueDate']?.toString() ?? '',
+      dueDate: json['dueDate']?.toString() ?? json['deadline']?.toString() ?? '',
+      projectId: pId,
+      projectName: pName,
     );
   }
 }

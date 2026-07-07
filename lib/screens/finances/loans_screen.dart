@@ -16,6 +16,7 @@ class _LoansScreenState extends State<LoansScreen> {
   final _reasonCtrl = TextEditingController();
   final _emiCtrl = TextEditingController();
   String? _selectedEmployeeId;
+  String _requestType = 'Loan'; // 'Loan' or 'Petty Cash'
 
   @override
   void initState() {
@@ -43,8 +44,8 @@ class _LoansScreenState extends State<LoansScreen> {
 
     final hr = Provider.of<HrProvider>(context, listen: false);
     final amount = double.parse(_amountCtrl.text);
-    final reason = _reasonCtrl.text.trim();
-    final emi = double.parse(_emiCtrl.text);
+    final reason = '[${_requestType.toUpperCase()}] ' + _reasonCtrl.text.trim();
+    final emi = _requestType == 'Petty Cash' ? 0.0 : double.parse(_emiCtrl.text);
 
     final success = await hr.applyLoan(
       amount,
@@ -58,7 +59,9 @@ class _LoansScreenState extends State<LoansScreen> {
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isAdminOrHr ? 'Advance/Loan issued to staff employee!' : 'Loan request submitted successfully!'),
+          content: Text(isAdminOrHr 
+              ? '${_requestType} issued to staff employee!' 
+              : '${_requestType} request submitted successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -66,6 +69,7 @@ class _LoansScreenState extends State<LoansScreen> {
       _reasonCtrl.clear();
       _emiCtrl.clear();
       _selectedEmployeeId = null;
+      _requestType = 'Loan';
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,6 +122,41 @@ class _LoansScreenState extends State<LoansScreen> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Request Type Selector
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text('Salary Loan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              value: 'Loan',
+                              groupValue: _requestType,
+                              activeColor: const Color(0xFF2563EB),
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setModalState(() => _requestType = val);
+                                }
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text('Petty Cash', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              value: 'Petty Cash',
+                              groupValue: _requestType,
+                              activeColor: const Color(0xFF2563EB),
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setModalState(() => _requestType = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
                       // If Admin/HR, show staff employee dropdown
                       if (isAdminOrHr) ...[
                         DropdownButtonFormField<String>(
@@ -151,7 +190,7 @@ class _LoansScreenState extends State<LoansScreen> {
                         style: const TextStyle(color: Color(0xFF0F172A)),
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          labelText: 'Disbursed Amount (INR)',
+                          labelText: _requestType == 'Petty Cash' ? 'Petty Cash Amount (INR)' : 'Disbursed Amount (INR)',
                           labelStyle: const TextStyle(color: Color(0xFF64748B)),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           enabledBorder: OutlineInputBorder(
@@ -163,23 +202,25 @@ class _LoansScreenState extends State<LoansScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Monthly EMI deduction
-                      TextFormField(
-                        controller: _emiCtrl,
-                        style: const TextStyle(color: Color(0xFF0F172A)),
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Monthly EMI Deduction (INR)',
-                          labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      // Monthly EMI deduction (only show if requestType is Loan)
+                      if (_requestType == 'Loan') ...[
+                        TextFormField(
+                          controller: _emiCtrl,
+                          style: const TextStyle(color: Color(0xFF0F172A)),
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Monthly EMI Deduction (INR)',
+                            labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
                           ),
+                          validator: (value) => value == null || double.tryParse(value) == null ? 'Enter valid EMI amount' : null,
                         ),
-                        validator: (value) => value == null || double.tryParse(value) == null ? 'Enter valid EMI amount' : null,
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Reason
                       TextFormField(
@@ -307,8 +348,8 @@ class _LoansScreenState extends State<LoansScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _buildMetaCell('Principal', '₹ ${req.amount.toStringAsFixed(0)}'),
-                                _buildMetaCell('Monthly EMI', '₹ ${req.emiAmount.toStringAsFixed(0)}'),
+                                _buildMetaCell(req.emiAmount == 0.0 ? 'Amount' : 'Principal', '₹ ${req.amount.toStringAsFixed(0)}'),
+                                _buildMetaCell(req.emiAmount == 0.0 ? 'Type' : 'Monthly EMI', req.emiAmount == 0.0 ? 'Petty Cash' : '₹ ${req.emiAmount.toStringAsFixed(0)}'),
                                 _buildMetaCell('Remaining Balance', '₹ ${req.balanceRemaining.toStringAsFixed(0)}'),
                               ],
                             ),

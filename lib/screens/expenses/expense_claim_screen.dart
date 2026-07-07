@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -36,12 +37,41 @@ class _ExpenseClaimScreenState extends State<ExpenseClaimScreen> {
     super.dispose();
   }
 
-  Future<void> _captureReceipt() async {
+  Future<void> _selectReceiptSource() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFFF43F5E)),
+                title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickReceipt(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF2563EB)),
+                title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickReceipt(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickReceipt(ImageSource source) async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 70, // Compress for network efficiency
-      );
+      final XFile? image = await _pickReceiptFile(source);
       if (image != null) {
         setState(() {
           _receiptFile = File(image.path);
@@ -49,9 +79,16 @@ class _ExpenseClaimScreenState extends State<ExpenseClaimScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Camera Access Error: $e')),
+        SnackBar(content: Text('Image Source Error: $e')),
       );
     }
+  }
+
+  Future<XFile?> _pickReceiptFile(ImageSource source) async {
+    return await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 70, // Compress for network efficiency
+    );
   }
 
   Future<void> _submit() async {
@@ -193,7 +230,7 @@ class _ExpenseClaimScreenState extends State<ExpenseClaimScreen> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                  await _captureReceipt();
+                                  await _selectReceiptSource();
                                   setModalState(() {});
                               },
                               icon: const Icon(Icons.camera_alt_rounded, color: Color(0xFFF43F5E)),
@@ -304,7 +341,18 @@ class _ExpenseClaimScreenState extends State<ExpenseClaimScreen> {
                         ),
                       ],
                     ),
-                    trailing: _buildStatusBadge(status),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (exp['hasReceipt'] == true)
+                          IconButton(
+                            icon: const Icon(Icons.attachment_rounded, color: Color(0xFF2563EB)),
+                            onPressed: () => _viewReceipt(context, exp['_id']),
+                            tooltip: 'View Receipt',
+                          ),
+                        _buildStatusBadge(status),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -314,6 +362,42 @@ class _ExpenseClaimScreenState extends State<ExpenseClaimScreen> {
         backgroundColor: const Color(0xFFF43F5E),
         child: const Icon(Icons.add, color: Colors.white),
       ),
+    );
+  }
+
+  void _viewReceipt(BuildContext context, String expenseId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final hr = Provider.of<HrProvider>(context, listen: false);
+        return AlertDialog(
+          title: const Text('Receipt Preview', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: FutureBuilder<Uint8List?>(
+            future: hr.fetchReceiptBytes(expenseId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 150,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasError || snapshot.data == null) {
+                return const SizedBox(
+                  height: 100,
+                  child: Center(child: Text('Failed to load receipt image.')),
+                );
+              }
+              return Image.memory(snapshot.data!, fit: BoxFit.contain);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            )
+          ],
+        );
+      },
     );
   }
 
