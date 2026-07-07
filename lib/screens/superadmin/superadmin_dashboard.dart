@@ -458,6 +458,66 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
+  void _showChangePasswordDialog(BuildContext context) {
+    final formKey = GlobalKey<FormState>();
+    final currentPasswordCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        return AlertDialog(
+          title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: currentPasswordCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Current Password'),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: newPasswordCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'New Password'),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                final success = await auth.changePassword(
+                  currentPasswordCtrl.text,
+                  newPasswordCtrl.text,
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _showSnackBar(
+                    success ? 'Password updated successfully!' : (auth.errorMessage ?? 'Failed to update password.'),
+                    success ? Colors.green : Colors.redAccent,
+                  );
+                }
+              },
+              child: const Text('Update'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ==========================================================
   // TOP HEADER PANEL
   // ==========================================================
@@ -484,6 +544,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           ),
           Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.vpn_key_rounded, color: Color(0xFF4F46E5)),
+                tooltip: 'Change Password',
+                onPressed: () => _showChangePasswordDialog(context),
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh_rounded, color: Color(0xFF4F46E5)),
                 tooltip: 'Refresh Current View',
